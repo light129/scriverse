@@ -460,7 +460,8 @@ describe("作者完整创作流程", () => {
     expect(styles.text).toContain(':is(#users-dialog, #platform-ui-settings-dialog, #members-dialog, #appearance-dialog) select:not([multiple]) {');
     expect(styles.text).toContain('background-position: right 21px center, right 16px center;');
     expect(keyboardShortcuts.text).toContain("export function isGlobalSearchShortcut(event)");
-    expect(application.text).toContain("if (!isGlobalSearchShortcut(event) || !state.work) return;");
+    expect(application.text).toContain("const globalSearch = isGlobalSearchShortcut(event);");
+    expect(application.text).toContain("const chapterSearch = isChapterSearchShortcut(event) && isChapterSearchContext();");
     expect(page.text).not.toContain('class="setting-markdown-heading"');
     expect(application.text).not.toContain('在这里完整记录设定内容');
     expect(application.text).not.toContain('支持标题、列表、引用、表格、链接和图片');
@@ -589,7 +590,9 @@ describe("作者完整创作流程", () => {
     expect(styles.text).not.toContain(".task-table .task-id");
     expect(application.text).not.toContain("<th>ID</th><th>任务</th>");
     expect(page.text).toContain('id="top-search-button"');
-    expect(page.text).toContain('title="全文检索（Command/Ctrl+F）"');
+    expect(page.text).toContain('aria-label="全局搜索" title="全局搜索（Ctrl+E）" aria-haspopup="dialog" aria-controls="search-dialog" aria-keyshortcuts="Control+E"');
+    expect(page.text).toContain('feature=global-search-entry-ctrl-e-v1');
+    expect(page.text).toContain('title="全局搜索（Ctrl+E）"');
     expect(page.text).toContain('id="user-management-button" class="settings-hub-card hidden"');
     expect(page.text).toContain('id="writing-progress-button" class="module-nav-secondary hidden" type="button"><svg class="nav-icon"');
     expect(page.text).not.toContain('id="writing-progress-button" class="settings-hub-card"');
