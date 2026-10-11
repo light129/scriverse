@@ -83,7 +83,7 @@ describe("编辑器工具栏布局", () => {
     expect(application.text).toContain("function enterChapterEditMode()");
     expect(application.text).toContain('persistentToast("正在保存中")');
     expect(application.text).toContain('toast(`保存成功（正文 v${saved.versionNo}）`)');
-    expect(application.text).toContain('import { isGlobalSearchShortcut, isSaveShortcut } from "/keyboard-shortcuts.js?v=20260831-chapter-save-shortcut-v2";');
+    expect(application.text).toContain('import { isChapterSearchShortcut, isGlobalSearchShortcut, isSaveShortcut } from "/keyboard-shortcuts.js?v=20261011-global-search-ctrl-e-v1";');
     expect(application.text).toContain('if (!isSaveShortcut(event, navigator.platform) || !state.chapter || state.module !== "editor" || chapterEditorReadOnly || !canEditProse()) return;');
     expect(application.text).toContain('$("#save-button").click();');
     expect(application.text).toContain('editButton.textContent = chapterEditorReadOnly ? "编辑" : "预览";');
