@@ -128,7 +128,7 @@ import { buildRaceForest, eligibleRaceParents, orderRaceFilterOptions, racePathL
 import { ANALYSIS_TYPES, analysisTypeDescription } from "/analysis-types.js?v=20260721-analysis-descriptions";
 import { WORK_PERMISSION_MODULES, canReadPermissionModule, canReadUiModule, canWritePermissionModule, canWriteUiModule, emptyModulePermissions, firstReadableUiModule, normalizeModulePermissions, permissionSummary } from "/work-permissions.js?v=20260818-annotation-permissions-v1";
 import { MODULE_LAYOUT_STORAGE_KEY, LEGACY_SETTINGS_LAYOUT_STORAGE_KEY, normalizeModuleLayout } from "/module-layout.js?v=20260723-module-layout-toggle";
-import { isGlobalSearchShortcut, isSaveShortcut } from "/keyboard-shortcuts.js?v=20260831-chapter-save-shortcut-v2";
+import { isChapterSearchShortcut, isGlobalSearchShortcut, isSaveShortcut } from "/keyboard-shortcuts.js?v=20261011-global-search-ctrl-e-v1";
 import { prioritizeGlobalSearchResults, resolveGlobalSearchTarget, splitGlobalSearchHighlight } from "/global-search.js?v=20260804-agent-history-score-sort-v1";
 import { filterCharacters, paginateCharacters } from "/character-filters.js?v=20260817-character-filter-state-v1";
 import { filterRelationships, sortCharacterRelationships } from "/relationship-filters.js?v=20260818-character-relationship-group-v1";
@@ -1892,8 +1892,8 @@ function isChapterSearchContext() {
 function syncTopSearchButton() {
   const button = $("#top-search-button");
   const chapterContext = isChapterSearchContext();
-  button.classList.toggle("hidden", chapterContext);
-  button.disabled = !state.work || chapterContext || !canReadAggregateContent();
+  button.classList.remove("hidden");
+  button.disabled = !state.work || !canReadAggregateContent();
   if (!chapterContext) closeChapterSearchPanel({ restoreFocus: false });
 }
 
@@ -22833,11 +22833,14 @@ document.addEventListener("keydown", (event) => {
   $("#save-button").click();
 }, { capture: true });
 document.addEventListener("keydown", (event) => {
-  if (!isGlobalSearchShortcut(event) || !state.work) return;
+  if (!state.work) return;
+  const globalSearch = isGlobalSearchShortcut(event);
+  const chapterSearch = isChapterSearchShortcut(event) && isChapterSearchContext();
+  if (!globalSearch && !chapterSearch) return;
   event.preventDefault();
   event.stopPropagation();
   if (event.repeat) return;
-  if (isChapterSearchContext()) {
+  if (chapterSearch) {
     openChapterSearchPanel();
     return;
   }
