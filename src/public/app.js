@@ -2135,32 +2135,6 @@ function setupPanelResize(handle, side) {
   });
 }
 
-function setupMobileAiPanelSwipeDismiss() {
-  const heading = $(".ai-heading");
-  let swipe = null;
-  heading.addEventListener("pointerdown", (event) => {
-    if (!isMobileViewport() || panelLayout.aiCollapsed || aiConversationWorkspaceOpen
-      || !event.isPrimary || event.button !== 0 || event.target.closest("button, input, select, textarea, a")) return;
-    swipe = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY };
-    heading.setPointerCapture(event.pointerId);
-  });
-  const finish = (event) => {
-    if (!swipe || event.pointerId !== swipe.pointerId) return;
-    const deltaX = event.clientX - swipe.startX;
-    const deltaY = event.clientY - swipe.startY;
-    const shouldCollapse = deltaY >= 72 && deltaY > Math.abs(deltaX) * 1.2;
-    swipe = null;
-    if (!shouldCollapse || aiConversationWorkspaceOpen) return;
-    event.preventDefault();
-    panelLayout.aiCollapsed = true;
-    applyPanelLayout(true);
-  };
-  heading.addEventListener("pointerup", finish);
-  heading.addEventListener("pointercancel", (event) => {
-    if (swipe?.pointerId === event.pointerId) swipe = null;
-  });
-}
-
 let chapterLineNumberFrame = null;
 let chapterLineNumberTimer = null;
 let chapterLineLayout = null;
@@ -22325,7 +22299,6 @@ $("#ai-semantic-query").addEventListener("keydown", (event) => {
 $("#ai-semantic-inject").addEventListener("click", () => { void injectAiSemanticSelection(); });
 setupPanelResize($("#left-panel-resize"), "left");
 setupPanelResize($("#ai-panel-resize"), "ai");
-setupMobileAiPanelSwipeDismiss();
 if (typeof ResizeObserver !== "undefined") new ResizeObserver(scheduleChapterLineNumbers).observe($("#chapter-editor-scroll"));
 if (typeof ResizeObserver !== "undefined") new ResizeObserver(syncMobileAiPanelSafeTop).observe($("#chapter-foreshadow-reminder"));
 window.addEventListener("resize", () => {

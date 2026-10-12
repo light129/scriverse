@@ -4536,8 +4536,6 @@ select:focus, input:focus, textarea:focus { border-color: #a77768; box-shadow: 0
     transition: transform .2s ease;
   }
   .ai-heading { gap: 6px; }
-  .ai-panel:not(.is-conversation-workspace) .ai-heading { touch-action: pan-x; }
-  .ai-panel:not(.is-conversation-workspace) .ai-heading-title { cursor: grab; }
   .ai-heading-actions { gap: 4px; }
   .ai-heading-actions button { height: 32px; min-height: 32px; }
   .ai-heading-actions .ai-conversation-switcher { width: min(106px, 28vw); max-width: 106px; }
