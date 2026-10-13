@@ -5,6 +5,7 @@ import { countProseWords } from "/text-count.js?v=20260906-chapter-word-count-co
 import { renderMarkdown } from "/markdown.js?v=20260912-stream-render-v2";
 import { createStreamingMarkdownRenderer } from "/stream-markdown.js?v=20260912-stream-render-v2";
 import { createAiRenderScheduler } from "/ai-render-scheduler.js?v=20260912-stream-render-v2";
+import { shouldFollowAiFeedAfterScroll } from "/ai-feed-scroll.js?v=20261013-manual-scroll-intent-v1";
 import { createImWorkspace } from "/im.js?v=20260904-im-judge-outcomes-v106";
 import { findAiMention, listAiMentionOptions, mergeAiReferenceScope } from "/ai-mentions.js?v=20260811-user-message-mentions-v1";
 import { applyAiSkillCommand, findAiSkillCommand, listAiSlashOptions } from "/ai-skill-menu.js?v=20260921-ai-compact-slash-command-v2";
@@ -3893,6 +3894,7 @@ const AI_TOOL_DESCRIPTIONS = {
 
 const aiFeedScrollFrames = new WeakMap();
 const aiFeedAutoScrollStates = new WeakMap();
+const aiFeedLastScrollTops = new WeakMap();
 const aiFeedScrollBindings = new WeakSet();
 const aiProcessScrollFrames = new WeakMap();
 const aiProcessRenderStates = new WeakMap();
@@ -3979,16 +3981,36 @@ function aiFeedIsNearBottom(feed) {
 
 function bindAiFeedAutoScroll(feed) {
   if (!feed || aiFeedScrollBindings.has(feed)) return;
-  const update = () => {
-    const shouldFollow = aiFeedIsNearBottom(feed);
-    aiFeedAutoScrollStates.set(feed, shouldFollow);
-    if (shouldFollow) return;
+  aiFeedLastScrollTops.set(feed, feed.scrollTop);
+  const cancelPendingScroll = () => {
     const currentFrame = aiFeedScrollFrames.get(feed);
     if (currentFrame === undefined) return;
     window.cancelAnimationFrame(currentFrame);
     aiFeedScrollFrames.delete(feed);
   };
+  const update = () => {
+    const previousScrollTop = aiFeedLastScrollTops.get(feed) ?? feed.scrollTop;
+    const scrollTop = feed.scrollTop;
+    aiFeedLastScrollTops.set(feed, scrollTop);
+    const shouldFollow = shouldFollowAiFeedAfterScroll({
+      previousScrollTop,
+      scrollTop,
+      nearBottom: aiFeedIsNearBottom(feed),
+      shouldFollow: aiFeedAutoScrollStates.get(feed)
+    });
+    aiFeedAutoScrollStates.set(feed, shouldFollow);
+    if (shouldFollow) return;
+    cancelPendingScroll();
+  };
   feed.addEventListener("scroll", update, { passive: true });
+  feed.addEventListener("wheel", (event) => {
+    if (event.deltaY < 0 && !event.target.closest(".ai-process-step-body")) {
+      aiFeedAutoScrollStates.set(feed, false);
+      cancelPendingScroll();
+    } else if (event.deltaY > 0 && aiFeedIsNearBottom(feed)) {
+      aiFeedAutoScrollStates.set(feed, true);
+    }
+  }, { passive: true });
   aiFeedScrollBindings.add(feed);
   update();
 }
