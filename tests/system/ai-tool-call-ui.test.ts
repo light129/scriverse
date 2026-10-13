@@ -74,7 +74,7 @@ describe("AI 工具调用记录界面", () => {
     expect(application).toContain("scrollAiFeedToBottom(tab.feed, { force: true });");
     expect(application).toContain("window.requestAnimationFrame(() =>");
     expect(application.match(/scrollAiFeedToBottom\(feed\);/gu)?.length).toBeGreaterThanOrEqual(7);
-    expect(page).toContain("feature=ai-feed-scroll-follow-v2");
+    expect(page).toContain("feature=ai-feed-scroll-follow-v3");
     expect(application).toContain('from "/ai-feed-scroll.js?v=20261013-manual-scroll-intent-v1"');
     expect(application).toContain('return "历史记录未保存"');
     expect(application).toContain('new Intl.DateTimeFormat("zh-CN"');
