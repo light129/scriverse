@@ -42,6 +42,9 @@ describe("AI 工具调用记录界面", () => {
     expect(application).toContain("function aiFeedIsNearBottom(feed)");
     expect(application).toContain("function bindAiFeedAutoScroll(feed)");
     expect(application).toContain('feed.addEventListener("scroll", update, { passive: true });');
+    expect(application).toContain('feed.addEventListener("wheel", (event) => {');
+    expect(application).toContain("if (event.deltaY < 0 && !event.target.closest(\".ai-process-step-body\")) {");
+    expect(application).toContain("shouldFollowAiFeedAfterScroll({");
     expect(application).toContain('function scrollAiFeedToBottom(feed = $("#ai-feed"), { force = false } = {})');
     expect(application).toContain("if (force) aiFeedAutoScrollStates.set(feed, true);");
     expect(application).toContain("if (!aiFeedAutoScrollStates.get(feed)) return;");
@@ -71,7 +74,8 @@ describe("AI 工具调用记录界面", () => {
     expect(application).toContain("scrollAiFeedToBottom(tab.feed, { force: true });");
     expect(application).toContain("window.requestAnimationFrame(() =>");
     expect(application.match(/scrollAiFeedToBottom\(feed\);/gu)?.length).toBeGreaterThanOrEqual(7);
-    expect(page).toContain("feature=ai-feed-scroll-follow-v2");
+    expect(page).toContain("feature=ai-feed-scroll-follow-v3");
+    expect(application).toContain('from "/ai-feed-scroll.js?v=20261013-manual-scroll-intent-v1"');
     expect(application).toContain('return "历史记录未保存"');
     expect(application).toContain('new Intl.DateTimeFormat("zh-CN"');
     expect(application).toContain('formatAiToolCallResult(toolCall?.result)');
