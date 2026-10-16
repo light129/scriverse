@@ -4417,7 +4417,7 @@ function renderAiUserQuestionOptions(question) {
   customInput.disabled = !isPending;
   syncAiQuestionAnswerCount();
   syncAiQuestionOptionPresentation();
-  // 提交按钮由选择状态驱动：待回答且已选择（或输入）时才可提交。
+  // 待回答时允许点击提交，缺失回答由提交校验统一提示。
   if (isPending) syncAiQuestionSubmitState();
   else $("#ai-question-submit").disabled = true;
   syncAiQuestionDismissState();
@@ -23124,8 +23124,7 @@ function syncAiQuestionSubmitState() {
   $("#ai-question-progress").textContent = `问题 ${aiQuestionDialogIndex + 1} / ${questionCount} · 已回答 ${answeredCount} / ${questionCount}`;
   const disabled = aiQuestionDialogBusy
     || currentAiQuestionDialogView?.status !== "pending"
-    || aiQuestionDrafts.length !== questionCount
-    || unansweredCount > 0;
+    || aiQuestionDrafts.length !== questionCount;
   submit.disabled = disabled;
   submit.title = unansweredCount > 0 ? `还有 ${unansweredCount} 个问题未回答` : "";
 }
@@ -23162,9 +23161,13 @@ function moveAiQuestionDialog(direction) {
 $("#ai-question-previous").addEventListener("click", () => moveAiQuestionDialog(-1));
 $("#ai-question-next").addEventListener("click", () => moveAiQuestionDialog(1));
 $("#ai-question-submit").addEventListener("click", () => {
-  if (aiQuestionDialogQuestionId == null) return;
+  if (aiQuestionDialogQuestionId == null || aiQuestionDialogBusy || currentAiQuestionDialogView?.status !== "pending") return;
   updateCurrentAiQuestionDraft();
-  if (!aiQuestionDrafts.every(aiQuestionDraftIsAnswered)) return syncAiQuestionSubmitState();
+  if (aiQuestionDrafts.length !== aiQuestionItems(currentAiQuestionDialogView).length || !aiQuestionDrafts.every(aiQuestionDraftIsAnswered)) {
+    syncAiQuestionSubmitState();
+    toast("请回答所有问题再提交", "warning");
+    return;
+  }
   respondAiUserQuestion(aiQuestionDialogQuestionId, {
     action: "answer",
     answers: aiQuestionDrafts.map((draft) => ({
