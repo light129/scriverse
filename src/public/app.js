@@ -22757,9 +22757,12 @@ $("#chapter-type-menu").addEventListener("click", async (event) => {
     const updated = await api(`/api/chapters/${chapterId}`, { method: "PATCH", body: { chapterType } });
     for (const volume of state.work.volumes) {
       const chapter = volume.chapters.find((item) => item.id === chapterId);
-      if (chapter) chapter.chapterType = updated.chapterType;
+      if (chapter) Object.assign(chapter, { chapterType: updated.chapterType, versionNo: updated.versionNo });
     }
-    if (state.chapter?.id === chapterId) state.chapter.chapterType = updated.chapterType;
+    if (state.chapter?.id === chapterId) {
+      Object.assign(state.chapter, { chapterType: updated.chapterType, versionNo: updated.versionNo });
+      updateChapterStats();
+    }
     renderTree();
     toast(`章节类型已标记为“${chapterType}”`);
   } catch (error) {
