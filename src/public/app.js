@@ -20684,6 +20684,8 @@ async function showVersions() {
     }
     try {
       state.chapter = await api(`/api/chapters/${state.chapter.id}/restore`, { method: "POST", body: { versionNo: Number(button.dataset.restoreVersion) } });
+      mergeChapterDirectoryEntry(state.chapter);
+      syncChapterTreeSelection();
       chapterContentReadyId = state.chapter.id;
       resetChapterDraftLineIds(state.chapter);
       lastSavedChapterSnapshot = { chapterId: state.chapter.id, title: state.chapter.title, content: state.chapter.content };
