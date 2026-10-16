@@ -33,6 +33,7 @@ describe("超长 AI 历史读取", () => {
     const metadata = JSON.stringify({ modelId: "history-model", mentionCharacterIds: Array.from({ length: 200 }, (_, index) => `character-history-${index}`) });
     for (let index = 0; index < 6; index += 1) {
       const conversation = runtime.store.createAiConversation(workId, `历史会话 ${index}`);
+      runtime.database.run("UPDATE ai_conversations SET injected_entities_json = ? WHERE id = ?", JSON.stringify({ characters: Array.from({ length: 2_000 }, (_, item) => `cached-character-${item}`) }), String(conversation.id));
       runtime.database.transaction(() => {
         for (let message = 1; message <= 160; message += 1) {
           insertMessage(String(conversation.id), message % 2 ? "user" : "assistant", message === 160 ? longContent : `历史 ${message}`, message % 2 ? metadata : "{}");
@@ -48,8 +49,9 @@ describe("超长 AI 历史读取", () => {
       expect(String(conversation.preview)).toMatch(/^最新回复/u);
     }
     expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThan(20_000);
-    expect(all.mock.calls.filter(([sql]) => /SELECT\s+metadata_json\s+FROM\s+ai_conversation_messages/iu.test(sql))).toHaveLength(0);
-    expect(String(all.mock.calls[0]?.[0])).not.toContain("SELECT conversation.*");
+    const materialized = all.mock.results.flatMap(result => result.type === "return" && Array.isArray(result.value) ? result.value : []);
+    expect(materialized.length).toBeLessThanOrEqual(20);
+    expect(Buffer.byteLength(JSON.stringify(materialized))).toBeLessThan(100_000);
   });
 
   it("保留首个有效模型和图片锁定语义，并处理空白或异常元数据", () => {

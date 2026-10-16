@@ -24,6 +24,7 @@ describe("工作台模块图预加载", () => {
     expect(preloadHrefs).toHaveLength(75);
     expect(preloadHrefs[0]).toContain("/app.js?v=");
     expect(preloadHrefs).toContain("/ai-feed-scroll.js?v=20261013-manual-scroll-intent-v1");
+    expect(preloadHrefs).toContain("/ai-conversation.js?v=20261017-history-render-v1");
     expect(preloadHrefs).toContain("/chapter-directory.js?v=20260921-directory-performance-v1");
     expect(preloadHrefs).toContain("/reading-preview.js?v=20260813-reader-theme-v2");
     expect(preloadHrefs).toContain("/avatar-crop.js?v=20260725-avatar-crop");

@@ -28,7 +28,9 @@ describe("AI 用户消息引用横幅", () => {
     expect(application).toContain('reference.setAttribute("aria-label", `${kind}：${name}`);');
     expect(application).toContain('canReadModule("races") ? api(`/api/works/${workId}/races`)');
     expect(application).toContain('canReadModule("organizations") ? apiAllPages(`/api/works/${workId}/organizations`)');
-    expect(application).toContain("ensureAiReferencesLoaded()\n    ]);");
+    expect(application).toContain("function scheduleAiHistoryReferences(workId)");
+    expect(application).toContain("void ensureAiReferencesLoaded().catch");
+    expect(application).toContain("if (context) renderAiMessageMentions(message, context.metadata, context.inlineReferences);");
     expect(application).toContain("function aiPromptTextFromRange(range, prompt)");
     expect(application).toContain("function aiPromptTextBoundary(prompt, offset)");
     expect(application).toContain("function serializeAiReference(reference)");

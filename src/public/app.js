@@ -18,7 +18,7 @@ import {
   roleplayScenePinHasContent,
   roleplayUserTurnDisplayText
 } from "/roleplay-turn.js?v=20260930-ai-title-xml-v1";
-import { shouldShowAiQuickActions } from "/ai-conversation.js?v=20260713-quick-actions";
+import { deferredAiHistoryMessageIndexes, estimateAiHistoryContentHeight, shouldShowAiQuickActions } from "/ai-conversation.js?v=20261017-history-render-v1";
 import { createAiChatTabManager, normalizeAiChatTabLimit } from "/ai-chat-tabs.js?v=20260816-ai-chat-switcher-v2";
 import { aiRequestTargetsState, createAiRequestAbortError, createAiRequestManager, isAiRequestCancellation } from "/ai-request-manager.js?v=20260905-question-stream-v2";
 import { calculateLineNumberTextOffset, calculateLineNumberTop } from "/line-number-layout.js?v=20260713-row-box-alignment";
@@ -1165,11 +1165,14 @@ function renderAiPromptQueue() {
 }
 
 function beginAiConversationNavigation(reason, action = "切换会话") {
+  aiConversationNavigationController?.abort();
+  aiConversationNavigationController = new AbortController();
   aiConversationNavigationGeneration += 1;
   aiConversationNavigationPending = aiConversationNavigationGeneration;
   const navigation = Object.freeze({
     generation: aiConversationNavigationGeneration,
-    workId: String(state.work?.id ?? "")
+    workId: String(state.work?.id ?? ""),
+    signal: aiConversationNavigationController.signal
   });
   return navigation;
 }
@@ -1182,11 +1185,14 @@ function isAiConversationNavigationCurrent(navigation) {
 function finishAiConversationNavigation(navigation) {
   if (aiConversationNavigationPending !== navigation.generation) return false;
   aiConversationNavigationPending = null;
+  aiConversationNavigationController = null;
   syncAiRequestControls();
   return true;
 }
 
 function invalidateAiConversationNavigation(reason, action = "切换作品") {
+  aiConversationNavigationController?.abort();
+  aiConversationNavigationController = null;
   if (aiRequestManager.hasActive()) {
     toast(`仍有 Agent turn 尚未结束，${action}会中断全部生成；已收到的内容会保留在历史记录中`, "warning");
   }
@@ -1288,6 +1294,7 @@ let initialWorkDetail = null;
 let initialReaderChapterRequest = null;
 let chapterSelectionRequestGeneration = 0;
 let aiConversationNavigationGeneration = 0;
+let aiConversationNavigationController = null;
 let aiConversationNavigationPending = null;
 let aiChatTabLimit = 5;
 let chapterAnnotationNoteMaxLength = 6000;
@@ -3511,6 +3518,7 @@ function closeAiChatTab(tabId) {
     toast(`“${tab.title || "新对话"}”仍在生成，关闭页签已中断该 turn；其他页签不受影响`, "warning");
   }
   const { active } = aiChatTabManager.close(tab.id);
+  disposeAiHistoryFeed(tab.feed);
   tab.feed.remove();
   aiStreamRenders.refresh();
   if (!wasActive) {
@@ -3526,6 +3534,7 @@ function resetAiChatTabs() {
   setAiConversationSwitcherVisible(false);
   setAiConversationWorkspaceVisible(false);
   const panels = $("#ai-chat-panels");
+  aiChatTabManager.list().forEach((tab) => disposeAiHistoryFeed(tab.feed));
   panels.replaceChildren();
   aiChatTabManager.reset();
   const tab = createAiChatTabState();
@@ -3583,6 +3592,7 @@ function resetAiFeed(
   const tab = aiChatTabManager.get(feed?.dataset.aiTabId);
   if (tab) tab.lastMessageAt = null;
   if (isActiveAiChatTab(tab)) state.aiLastMessageAt = null;
+  disposeAiHistoryFeed(feed);
   const roleplayName = roleplayCharacter?.name;
   const roleplayUserName = roleplayUserCharacter?.name;
   feed.innerHTML = roleplayName
@@ -3674,6 +3684,8 @@ async function retryAiMessage(message) {
     toast("当前对话仍在生成回复，请等待完成或取消后再重试", "error");
     return;
   }
+  hydrateAiHistoryMessage(message);
+  disposeAiHistoryMessage(message);
   if (!isActiveAiChatTab(sourceTab)) activateAiChatTab(sourceTab.id, { persistCurrent: false, force: true });
   await sendAiWithOptions({
     retry: {
@@ -3899,7 +3911,107 @@ const aiFeedLastScrollTops = new WeakMap();
 const aiFeedScrollBindings = new WeakSet();
 const aiProcessScrollFrames = new WeakMap();
 const aiProcessRenderStates = new WeakMap();
+const aiHistoryFeedRenderers = new WeakMap();
+const aiHistoryMessageContents = new WeakMap();
+const aiMessageMentionContexts = new WeakMap();
 const aiMarkdownRenderers = new WeakMap();
+
+function disposeAiHistoryFeed(feed) {
+  const renderer = aiHistoryFeedRenderers.get(feed);
+  if (!renderer) return;
+  renderer.disposed = true;
+  renderer.observer.disconnect();
+  if (renderer.frame !== null) window.cancelAnimationFrame(renderer.frame);
+  renderer.queue.clear();
+  aiHistoryFeedRenderers.delete(feed);
+}
+
+function hydrateAiHistoryMessage(message) {
+  const state = aiHistoryMessageContents.get(message);
+  if (!state || state.rendered) return;
+  const feed = message.closest(".ai-feed");
+  const preserveScrollIntent = feed && aiFeedAutoScrollStates.get(feed) === false;
+  const scene = state.body.querySelector(".user-message-scene");
+  state.body.innerHTML = renderMarkdown(state.text);
+  if (state.role === "user") replaceAiReferenceMarkers(state.body, state.inlineReferences);
+  if (scene) state.body.prepend(scene);
+  message.classList.remove("ai-history-content-pending");
+  state.rendered = true;
+  if (preserveScrollIntent) aiFeedLastScrollTops.set(feed, feed.scrollTop);
+}
+
+function disposeAiHistoryMessage(message) {
+  const feed = message.closest(".ai-feed");
+  const renderer = aiHistoryFeedRenderers.get(feed);
+  renderer?.observer.unobserve(message);
+  renderer?.queue.delete(message);
+  aiHistoryMessageContents.delete(message);
+  message.classList.remove("ai-history-message", "ai-history-content-pending");
+  message.style.removeProperty("--ai-history-height");
+}
+
+function observeAiHistoryMessage(message, tab, text, inlineReferences, role, deferred) {
+  if (!tab?.feed || typeof IntersectionObserver !== "function"
+    || (text.length < 8_000 && (text.match(/\n/gu)?.length ?? 0) <= 150)) return;
+  const feed = tab.feed;
+  let renderer = aiHistoryFeedRenderers.get(feed);
+  if (!renderer) {
+    const sample = feed.querySelector(".assistant-message, .user-message") ?? feed;
+    const style = getComputedStyle(sample);
+    renderer = {
+      disposed: false, queue: new Set(), frame: null, observer: null,
+      width: Math.max(80, (feed.clientWidth || $("#ai-panel").clientWidth || 280) - 36),
+      fontSize: parseFloat(style.fontSize) || 12,
+      lineHeight: parseFloat(style.lineHeight) || 18.6
+    };
+    const flush = () => {
+      renderer.frame = null;
+      if (renderer.disposed || feed.classList.contains("hidden") || !feed.clientWidth || !feed.clientHeight) return;
+      for (const target of renderer.queue) {
+        renderer.queue.delete(target);
+        const state = aiHistoryMessageContents.get(target);
+        if (!target.isConnected || !state?.nearby || state.rendered) continue;
+        hydrateAiHistoryMessage(target);
+        break;
+      }
+      if (renderer.queue.size) renderer.frame = window.requestAnimationFrame(flush);
+    };
+    renderer.observer = new IntersectionObserver((entries) => {
+      if (renderer.disposed || feed.classList.contains("hidden") || !feed.clientWidth || !feed.clientHeight) return;
+      for (const entry of entries) {
+        const target = entry.target;
+        const state = aiHistoryMessageContents.get(target);
+        if (!state) continue;
+        state.nearby = entry.isIntersecting;
+        if (entry.isIntersecting) {
+          state.seen = true;
+          if (!state.rendered) renderer.queue.add(target);
+        } else if (state.seen && state.rendered) {
+          const preserveScrollIntent = aiFeedAutoScrollStates.get(feed) === false;
+          const height = state.body.getBoundingClientRect().height;
+          const scene = state.body.querySelector(".user-message-scene");
+          target.style.setProperty("--ai-history-height", `${Math.max(80, height)}px`);
+          state.body.textContent = state.text;
+          if (scene) state.body.prepend(scene);
+          target.classList.add("ai-history-content-pending");
+          state.rendered = false;
+          if (preserveScrollIntent) aiFeedLastScrollTops.set(feed, feed.scrollTop);
+        }
+      }
+      if (renderer.queue.size && renderer.frame === null) renderer.frame = window.requestAnimationFrame(flush);
+    }, { root: feed, rootMargin: "1200px 0px" });
+    aiHistoryFeedRenderers.set(feed, renderer);
+  }
+  const width = renderer.width * (role === "user" ? 0.6 : 1);
+  message.style.setProperty("--ai-history-height", `${estimateAiHistoryContentHeight(text, width, renderer.fontSize, renderer.lineHeight)}px`);
+  message.classList.add("ai-history-message");
+  message.classList.toggle("ai-history-content-pending", deferred);
+  aiHistoryMessageContents.set(message, {
+    body: message.querySelector(":scope > .message-body"), text, inlineReferences, role,
+    rendered: !deferred, nearby: false, seen: false
+  });
+  renderer.observer.observe(message);
+}
 function aiStreamTargetVisible(target) {
   target = target.element ?? target;
   const feed = target.closest(".ai-feed");
@@ -4609,7 +4721,8 @@ function renderAiProcessSteps(message, steps, completed, durationMs = null, visi
   const details = cached?.details ?? document.createElement("details");
   details.className = "ai-process-details";
   // 存在待确认/待回答的交互卡片时保持展开，避免审批入口在历史消息中被折叠。
-  details.open = !completed || steps.some((step) => step?.type === "tool" && isInteractiveToolPending(step.toolCall));
+  details.open = !completed || steps.some((step) => step?.type === "tool" && isInteractiveToolPending(step.toolCall))
+    || (cached?.completed === true && details.open);
   const summary = cached?.summary ?? document.createElement("summary");
   const title = cached?.title ?? document.createElement("span");
   title.textContent = completed ? "思考与执行过程" : "正在思考与执行";
@@ -4621,6 +4734,20 @@ function renderAiProcessSteps(message, steps, completed, durationMs = null, visi
   list.className = "ai-process-list";
   const entries = new Map();
   const nextNodes = [];
+  if (!cached) {
+    details.append(summary, list);
+    const body = message.querySelector(".message-body");
+    if (body) body.before(details);
+    else message.append(details);
+    details.addEventListener("toggle", () => {
+      const current = aiProcessRenderStates.get(message);
+      if (details.open && current?.deferred) renderAiProcessSteps(message, current.steps, current.completed, current.durationMs, current.visibleContents);
+    });
+  }
+  if (completed && !details.open && (!cached || cached.deferred)) {
+    aiProcessRenderStates.set(message, { details, summary, title, status, list, entries, completed, steps, durationMs, visibleContents, deferred: true });
+    return;
+  }
   for (const [index, step] of renderableSteps.entries()) {
     const key = `${step.type}:${String(step.id ?? index)}`;
     const previous = cached?.entries.get(key);
@@ -4662,17 +4789,11 @@ function renderAiProcessSteps(message, steps, completed, durationMs = null, visi
     entries.set(key, { node: section, label, body });
     nextNodes.push(section);
   }
-  if (!cached) details.append(summary, list);
   nextNodes.forEach((node, index) => {
     if (list.children[index] !== node) list.insertBefore(node, list.children[index] ?? null);
   });
   while (list.children.length > nextNodes.length) list.lastElementChild.remove();
-  if (!cached) {
-    const body = message.querySelector(".message-body");
-    if (body) body.before(details);
-    else message.append(details);
-  }
-  aiProcessRenderStates.set(message, { details, summary, title, status, list, entries, completed });
+  aiProcessRenderStates.set(message, { details, summary, title, status, list, entries, completed, deferred: false });
   if (!completed) scrollAiProcessStepsToBottom(message);
 }
 
@@ -4887,7 +5008,18 @@ function renderAiConversationHistory() {
     const meta = document.createElement("small");
     meta.textContent = aiConversationHistoryMeta(conversation);
     button.append(titleRow, meta);
-    button.addEventListener("click", () => openAiConversation(conversation.id));
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+      try {
+        await openAiConversation(conversation.id);
+      } catch (error) {
+        toast(`打开历史对话失败：${error.message}`, "error");
+      } finally {
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+      }
+    });
     const more = document.createElement("button");
     more.type = "button";
     more.className = "ai-history-more";
@@ -5265,6 +5397,14 @@ async function ensureAiConversationsLoaded() {
   }
 }
 
+function scheduleAiHistoryReferences(workId) {
+  if (loadedAiReferencesWorkId === workId) return;
+  window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+    if (state.work?.id !== workId) return;
+    void ensureAiReferencesLoaded().catch((error) => toast(`引用信息加载失败：${error.message}`, "error"));
+  }));
+}
+
 async function openAiConversation(conversationId, hideHistory = true, focusMessageId = null, roleplayMemorySourceId = null) {
   if (!state.work) return null;
   const existingTab = aiChatTabManager.findByConversation(conversationId);
@@ -5272,9 +5412,11 @@ async function openAiConversation(conversationId, hideHistory = true, focusMessa
     ? existingTab?.feed.querySelector(`[data-message-id="${CSS.escape(String(focusMessageId))}"]`)
     : null;
   if (existingTab && (!focusMessageId || existingMessage || aiRequestManager.hasActive(existingTab.id))) {
+    finishAiConversationNavigation(beginAiConversationNavigation("已切换 AI 对话", "切换会话"));
     activateAiChatTab(existingTab.id);
     if (focusMessageId && existingMessage) focusAiConversationMessage(focusMessageId);
     if (hideHistory) setAiHistoryVisible(false);
+    scheduleAiHistoryReferences(state.work.id);
     return state.aiConversations.find((conversation) => conversation.id === conversationId) ?? existingTab;
   }
   let openingSlot = existingTab ? { allowed: true, tab: existingTab, replacing: false } : aiChatTabOpeningSlot();
@@ -5287,10 +5429,7 @@ async function openAiConversation(conversationId, hideHistory = true, focusMessa
     const parameters = new URLSearchParams({ page: "1", limit: String(aiConversationMessagePageLimit), view: "messages" });
     if (focusMessageId) parameters.set("messageId", String(focusMessageId));
     if (roleplayMemorySourceId) parameters.set("roleplayMemorySourceId", String(roleplayMemorySourceId));
-    const [conversation] = await Promise.all([
-      api(`/api/ai-conversations/${conversationId}?${parameters}`),
-      ensureAiReferencesLoaded()
-    ]);
+    const conversation = await api(`/api/ai-conversations/${conversationId}?${parameters}`, { signal: navigation.signal });
     if (!isAiConversationNavigationCurrent(navigation)) return null;
     if (String(conversation.workId ?? "") !== navigation.workId) throw new Error("AI 对话不属于当前作品");
     upsertAiConversationSummary(conversation);
@@ -5306,7 +5445,9 @@ async function openAiConversation(conversationId, hideHistory = true, focusMessa
     applyConversationToAiChatTab(tab, conversation);
     activateAiChatTab(tab.id, { persistCurrent: false, force: true });
     if (focusMessageId) window.requestAnimationFrame(() => focusAiConversationMessage(focusMessageId));
+    else scrollAiFeedToBottom(tab.feed, { force: true });
     if (hideHistory) setAiHistoryVisible(false);
+    scheduleAiHistoryReferences(navigation.workId);
     return conversation;
   } catch (error) {
     if (!isAiConversationNavigationCurrent(navigation)) return null;
@@ -5320,6 +5461,7 @@ function focusAiConversationMessage(messageId) {
   const message = [...$("#ai-feed").querySelectorAll("[data-message-id]")]
     .find((candidate) => candidate.dataset.messageId === String(messageId));
   if (!message) return;
+  hydrateAiHistoryMessage(message);
   message.scrollIntoView({ behavior: "smooth", block: "center" });
   message.classList.add("is-search-target");
   window.setTimeout(() => message.classList.remove("is-search-target"), 1800);
@@ -5387,9 +5529,10 @@ async function loadAiConversationMessagePage(tab, page, prepend = false) {
     const knownIds = new Set([...feed.querySelectorAll("[data-message-id]")].map((message) => message.dataset.messageId));
     const historyFeed = document.createElement("div");
     const historyTab = { ...tab, id: null, feed: historyFeed, lastMessageAt: null };
-    for (const message of conversation.messages ?? []) {
-      if (knownIds.has(String(message.id))) continue;
-      appendMessage(message.role, message.content, message.citations, message.createdAt, message.metadata, message.id, { tab: historyTab });
+    const historyMessages = (conversation.messages ?? []).filter((message) => !knownIds.has(String(message.id)));
+    const deferred = typeof IntersectionObserver === "function" ? deferredAiHistoryMessageIndexes(historyMessages) : new Set();
+    for (const [index, message] of historyMessages.entries()) {
+      appendMessage(message.role, message.content, message.citations, message.createdAt, message.metadata, message.id, { tab: historyTab, history: true, historyOwner: tab, deferContent: deferred.has(index) });
     }
     aiFeedAutoScrollStates.set(feed, false);
     for (const message of [...historyFeed.children]) feed.insertBefore(message, firstMessage);
@@ -5413,8 +5556,10 @@ function renderAiConversationMessages(tab, conversation) {
   tab.messagesPage = conversation.messagesPage ?? null;
   tab.messageHistoryStartsAfterLatest = Number(conversation.messagesPage?.page ?? 1) > 1;
   resetAiFeed(tab.feed, tab.roleplayCharacter, tab.roleplayUserCharacter);
-  for (const message of conversation.messages ?? []) {
-    appendMessage(message.role, message.content, message.citations, message.createdAt, message.metadata, message.id, { tab });
+  const messages = conversation.messages ?? [];
+  const deferred = typeof IntersectionObserver === "function" ? deferredAiHistoryMessageIndexes(messages) : new Set();
+  for (const [index, message] of messages.entries()) {
+    appendMessage(message.role, message.content, message.citations, message.createdAt, message.metadata, message.id, { tab, history: true, deferContent: deferred.has(index) });
   }
   if (conversation.hasCompactedSummary) {
     renderConversationCompactionDivider(conversation.compactedMessageCount, conversation.messageCount, tab.feed, conversation);
@@ -16046,6 +16191,15 @@ async function loadAiReferences() {
   state.organizations = organizations;
   renderAiRoleplayCharacterSelect();
   loadedAiReferencesWorkId = workId;
+  for (const tab of aiChatTabManager.list()) {
+    if (tab.workId !== workId) continue;
+    const preserveScrollIntent = aiFeedAutoScrollStates.get(tab.feed) === false && tab.feed.clientWidth && tab.feed.clientHeight;
+    for (const message of tab.feed.querySelectorAll(".user-message[data-message-id]")) {
+      const context = aiMessageMentionContexts.get(message);
+      if (context) renderAiMessageMentions(message, context.metadata, context.inlineReferences);
+    }
+    if (preserveScrollIntent) aiFeedLastScrollTops.set(tab.feed, tab.feed.scrollTop);
+  }
 }
 
 async function ensureAiReferencesLoaded() {
@@ -20535,6 +20689,48 @@ function appendAiMessageImageAttachments(message, attachments) {
   message.append(host);
 }
 
+function renderAiMessageMentions(message, metadata, inlineReferences) {
+  message.querySelector(".user-message-mentions")?.remove();
+  const role = "user";
+  const chapterReferences = state.work?.volumes.flatMap((volume) => volume.chapters.map((chapter) => ({
+    id: chapter.id,
+    name: `${volume.title} / ${chapter.title}`
+  }))) ?? [];
+  const settingReferences = state.settings.map((setting) => ({ id: setting.id, name: setting.title }));
+  const contextSettingReferences = [{ id: "include-setting-info", name: "注入上下文设定" }];
+  const inlineReferenceKeys = new Set(inlineReferences.map((reference) => aiReferenceKey(reference)));
+  const mentionGroups = role === "user"
+    ? [
+      ["character", "角色", metadata?.mentionCharacterIds, state.characters],
+      ["race", "种族", metadata?.mentionRaceIds, state.races],
+      ["organization", "组织", metadata?.mentionOrganizationIds, state.organizations],
+      ["setting", "设定", metadata?.mentionSettingIds, settingReferences],
+      ["chapter", "章节", metadata?.mentionChapterIds, chapterReferences],
+      ["context-settings", "能力", metadata?.mentionContextSettingIds, contextSettingReferences]
+    ]
+      .flatMap(([referenceKind, kind, ids, items]) => userMessageMentionEntries(ids, items)
+        .filter((reference) => !inlineReferenceKeys.has(`${referenceKind}:${reference.id}`))
+        .map((reference) => ({ kind, name: reference.name })))
+    : [];
+  if (mentionGroups.length) {
+    const references = document.createElement("div");
+    references.className = "user-message-mentions";
+    const label = document.createElement("span");
+    label.className = "user-message-mentions-label";
+    label.textContent = "引用";
+    references.append(label);
+    for (const { kind, name } of mentionGroups) {
+      const reference = document.createElement("span");
+      reference.className = "user-message-mention";
+      reference.textContent = name;
+      reference.title = `${kind}：${name}`;
+      reference.setAttribute("aria-label", `${kind}：${name}`);
+      references.append(reference);
+    }
+    message.append(references);
+  }
+}
+
 function appendMessage(role, text, citations = [], createdAt = null, metadata = {}, messageId = null, options = {}) {
   const tab = options.tab ?? activeAiChatTab();
   const feed = options.feed ?? tab?.feed ?? $("#ai-feed");
@@ -20550,11 +20746,13 @@ function appendMessage(role, text, citations = [], createdAt = null, metadata = 
   const userMessageContent = parsedUserTurn?.hasMarkup ? parsedUserTurn.userMessage : text;
   const inlineReferences = role === "user" ? parseAiReferenceMarkup(userMessageContent).references : [];
   const renderedUserMessage = role === "user" ? parseAiReferenceMarkup(userMessageContent).text : userMessageContent;
+  const deferredContent = options.deferContent === true && !isFailure && !isInterrupted && typeof IntersectionObserver === "function";
   const messageBody = isFailure
     ? `<p class="ai-error-text">${esc(text)}</p>${aiToolCallSettingsLinkMarkup(text)}`
-    : renderMarkdown(renderedUserMessage);
+    : deferredContent ? "" : renderMarkdown(renderedUserMessage);
   message.innerHTML = `<div class="message-body">${messageBody}</div>`;
-  if (role === "user") replaceAiReferenceMarkers(message.querySelector(".message-body"), inlineReferences);
+  if (deferredContent) message.querySelector(".message-body").textContent = renderedUserMessage;
+  else if (role === "user") replaceAiReferenceMarkers(message.querySelector(".message-body"), inlineReferences);
   message.querySelector("[data-ai-tool-call-settings-link]")?.addEventListener("click", (event) => {
     event.preventDefault();
     openAiToolCallSettings().catch((error) => toast(`打开 AI 设置失败：${error.message}`, "error"));
@@ -20595,42 +20793,9 @@ function appendMessage(role, text, citations = [], createdAt = null, metadata = 
     scene.append(sceneLabel, sceneBody);
     message.querySelector(".message-body")?.prepend(scene);
   }
-  const chapterReferences = state.work?.volumes.flatMap((volume) => volume.chapters.map((chapter) => ({
-    id: chapter.id,
-    name: `${volume.title} / ${chapter.title}`
-  }))) ?? [];
-  const settingReferences = state.settings.map((setting) => ({ id: setting.id, name: setting.title }));
-  const contextSettingReferences = [{ id: "include-setting-info", name: "注入上下文设定" }];
-  const inlineReferenceKeys = new Set(inlineReferences.map((reference) => aiReferenceKey(reference)));
-  const mentionGroups = role === "user"
-    ? [
-      ["character", "角色", metadata?.mentionCharacterIds, state.characters],
-      ["race", "种族", metadata?.mentionRaceIds, state.races],
-      ["organization", "组织", metadata?.mentionOrganizationIds, state.organizations],
-      ["setting", "设定", metadata?.mentionSettingIds, settingReferences],
-      ["chapter", "章节", metadata?.mentionChapterIds, chapterReferences],
-      ["context-settings", "能力", metadata?.mentionContextSettingIds, contextSettingReferences]
-    ]
-      .flatMap(([referenceKind, kind, ids, items]) => userMessageMentionEntries(ids, items)
-        .filter((reference) => !inlineReferenceKeys.has(`${referenceKind}:${reference.id}`))
-        .map((reference) => ({ kind, name: reference.name })))
-    : [];
-  if (mentionGroups.length) {
-    const references = document.createElement("div");
-    references.className = "user-message-mentions";
-    const label = document.createElement("span");
-    label.className = "user-message-mentions-label";
-    label.textContent = "引用";
-    references.append(label);
-    for (const { kind, name } of mentionGroups) {
-      const reference = document.createElement("span");
-      reference.className = "user-message-mention";
-      reference.textContent = name;
-      reference.title = `${kind}：${name}`;
-      reference.setAttribute("aria-label", `${kind}：${name}`);
-      references.append(reference);
-    }
-    message.append(references);
+  if (role === "user") {
+    aiMessageMentionContexts.set(message, { metadata, inlineReferences });
+    renderAiMessageMentions(message, metadata, inlineReferences);
   }
   if (citations.length) {
     const references = document.createElement("div");
@@ -20694,6 +20859,7 @@ function appendMessage(role, text, citations = [], createdAt = null, metadata = 
   if (isFailure) renderMessageCardActions(message);
   attachMessageIdentity(message, messageId);
   feed.append(message);
+  if (options.history && !isFailure && !isInterrupted) observeAiHistoryMessage(message, options.historyOwner ?? tab, renderedUserMessage, inlineReferences, role, deferredContent);
   scrollAiFeedToBottom(feed);
   return message;
 }
