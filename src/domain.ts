@@ -65,7 +65,7 @@ export type ParsedChapter = {
   title: string;
   content: string;
   order: number;
-  chapterType: "正文" | "设定" | "作者的话" | "其他";
+  chapterType: "正文" | "番外" | "设定" | "作者的话" | "其他";
 };
 
 export type ParsedVolume = {

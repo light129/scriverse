@@ -1,5 +1,5 @@
 import { createMobileOfflineApi } from "/mobile-offline-api.js?v=20260922-mobile-offline-api-v1";
-import { createMobileSyncClient } from "/mobile-sync-client.js?v=20260922-mobile-sync-client-v2";
+import { createMobileSyncClient } from "/mobile-sync-client.js?v=20261017-chapter-extra-type-v1";
 import { MobileSyncStore } from "/mobile-sync-store.js?v=20260922-mobile-sync-store-v1";
 
 const MOBILE_QUERY_KEY = "scriverseMobile";

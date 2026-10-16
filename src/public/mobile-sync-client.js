@@ -60,7 +60,7 @@ export function syncMutationSnapshot(entityType, snapshot) {
     return {
       title: String(snapshot?.title ?? ""),
       content: String(snapshot?.content ?? ""),
-      chapterType: ["正文", "设定", "作者的话", "其他"].includes(snapshot?.chapterType) ? snapshot.chapterType : "正文"
+      chapterType: ["正文", "番外", "设定", "作者的话", "其他"].includes(snapshot?.chapterType) ? snapshot.chapterType : "正文"
     };
   }
   if (entityType === "setting") {

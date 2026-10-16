@@ -99,6 +99,8 @@ describe("Scriverse CLI 核心", () => {
     expect(cliResourceDefinitions.chapter.create.properties.insertBeforeChapterId).toContain("之前");
     expect(cliResourceDefinitions.chapter.create.properties.insertAfterChapterId).toContain("之后");
     expect(cliResourceDefinitions.chapter.create.properties.numberTitle).toContain("后移本卷后续序号");
+    expect(cliResourceDefinitions.chapter.create.properties.chapterType).toContain("番外");
+    expect(cliResourceDefinitions.chapter.update.properties.chapterType).toContain("番外");
     expect(cliResourceDefinitions.draft.actions).toEqual(["list", "get", "create", "update", "history", "restore"]);
   });
 

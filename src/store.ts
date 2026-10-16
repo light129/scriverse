@@ -123,7 +123,7 @@ function recycleBinExpiresAt(deletedAt: string): string {
   return new Date(new Date(deletedAt).getTime() + RECYCLE_BIN_RETENTION_DAYS * 24 * 60 * 60_000).toISOString();
 }
 
-type ChapterType = "正文" | "设定" | "作者的话" | "其他";
+type ChapterType = "正文" | "番外" | "设定" | "作者的话" | "其他";
 type ChapterAnnotationKind = "note" | "todo";
 type ChapterAnnotationListFilters = {
   chapterId?: string;
@@ -932,7 +932,7 @@ function parseRestorableFileSnapshot(value: string, workId: string): { volumes: 
     const chapters = volumeValue.chapters.map((chapterValue) => {
       if (!isRecord(chapterValue) || typeof chapterValue.title !== "string" || typeof chapterValue.content !== "string"
         || typeof chapterValue.sortOrder !== "number" || !Number.isFinite(chapterValue.sortOrder)
-        || !["正文", "设定", "作者的话", "其他"].includes(String(chapterValue.chapterType))) {
+        || !["正文", "番外", "设定", "作者的话", "其他"].includes(String(chapterValue.chapterType))) {
         return invalidFileSnapshot();
       }
       chapterCount += 1;

@@ -103,7 +103,7 @@ export const cliResourceDefinitions = {
         volumeId: "所属分卷 ID",
         title: "章节标题，最多 300 字",
         content: "正文，最多 200 万字符",
-        chapterType: "正文 | 设定 | 作者的话 | 其他",
+        chapterType: "正文 | 番外 | 设定 | 作者的话 | 其他",
         insertAfterChapterId: "插入到该章节之后；与 insertBeforeChapterId 互斥",
         insertBeforeChapterId: "插入到该章节之前；与 insertAfterChapterId 互斥",
         numberTitle: "为 true 时按作品标题编号给新章节编号，并后移本卷后续序号"
@@ -115,7 +115,7 @@ export const cliResourceDefinitions = {
         title: "新标题",
         content: "完整替换正文；长文本推荐使用 --field-file content=chapter.txt",
         excludedFromAnalysis: "是否排除 AI 分析",
-        chapterType: "正文 | 设定 | 作者的话 | 其他",
+        chapterType: "正文 | 番外 | 设定 | 作者的话 | 其他",
         changeNote
       },
       example: { content: "黎明时，林舟抵达北港，潮声掩住了警报。", changeNote: "增强开场危机感" }

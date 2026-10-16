@@ -827,7 +827,7 @@ describe("作品、导入和章节版本 API", () => {
     const movedSelection = selected.map((chapter) => ({ ...chapter, expectedVersionNo: 2 }));
     await request(runtime.app).post(`/api/works/${work.body.data.id}/chapters/batch`).send({
       chapters: movedSelection,
-      action: { type: "setType", chapterType: "设定" }
+      action: { type: "setType", chapterType: "番外" }
     }).expect(200);
     const typedSelection = selected.map((chapter) => ({ ...chapter, expectedVersionNo: 3 }));
     await request(runtime.app).post(`/api/works/${work.body.data.id}/chapters/batch`).send({
@@ -836,7 +836,7 @@ describe("作品、导入和章节版本 API", () => {
     }).expect(200);
 
     const updated = await request(runtime.app).get(`/api/chapters/${first.body.data.id}`).expect(200);
-    expect(updated.body.data).toMatchObject({ chapterType: "设定", excludedFromAnalysis: true, versionNo: 3 });
+    expect(updated.body.data).toMatchObject({ chapterType: "番外", excludedFromAnalysis: true, versionNo: 3 });
 
     const conflict = await request(runtime.app).post(`/api/works/${work.body.data.id}/chapters/batch`).send({
       chapters: [{ id: first.body.data.id, expectedVersionNo: 3 }, { id: second.body.data.id, expectedVersionNo: 99 }],
@@ -1363,25 +1363,30 @@ describe("作品、导入和章节版本 API", () => {
     expect(tree.body.data.volumes[0]).toMatchObject({ description: "间谍身份开始暴露。", keywords: ["身份暴露", "阵营冲突"], storyOrder: 3 });
   });
 
-  it("支持四种章节类型且只修改类型时仍记录新版本", async () => {
+  it("支持番外等五种章节类型且修改、恢复类型时保留版本", async () => {
     const work = await request(runtime.app).post("/api/works").send({ title: "章节类型作品" }).expect(201);
     const volume = await request(runtime.app).post(`/api/works/${work.body.data.id}/volumes`).send({ title: "正文" }).expect(201);
     const chapter = await request(runtime.app).post(`/api/works/${work.body.data.id}/chapters`).send({
       volumeId: volume.body.data.id,
       title: "资料章",
       content: "世界观资料。",
-      chapterType: "设定"
+      chapterType: "番外"
     }).expect(201);
-    expect(chapter.body.data).toMatchObject({ chapterType: "设定", versionNo: 1 });
+    expect(chapter.body.data).toMatchObject({ chapterType: "番外", versionNo: 1 });
 
     const marked = await request(runtime.app).patch(`/api/chapters/${chapter.body.data.id}`).send({ chapterType: "作者的话" }).expect(200);
     expect(marked.body.data).toMatchObject({ chapterType: "作者的话", versionNo: 2, analysisStatus: "expired" });
     const versions = await request(runtime.app).get(`/api/chapters/${chapter.body.data.id}/versions`).expect(200);
     expect(versions.body.data[0]).toMatchObject({ versionNo: 2, chapterType: "作者的话", source: "manual" });
-    await request(runtime.app).patch(`/api/chapters/${chapter.body.data.id}`).send({ chapterType: "无效类型" }).expect(400);
+    for (const chapterType of ["无效类型", "番外<script>", "番外' OR 1=1 --"]) {
+      await request(runtime.app).patch(`/api/chapters/${chapter.body.data.id}`).send({ chapterType }).expect(400);
+    }
+
+    const restored = await request(runtime.app).post(`/api/chapters/${chapter.body.data.id}/restore`).send({ versionNo: 1, expectedVersionNo: 2 }).expect(200);
+    expect(restored.body.data).toMatchObject({ chapterType: "番外", versionNo: 3, content: "世界观资料。" });
 
     const exported = await request(runtime.app).get(`/api/works/${work.body.data.id}/export?format=json`).expect(200);
-    expect(exported.body.data.work.volumes[0].chapters[0]).toMatchObject({ chapterType: "作者的话" });
+    expect(exported.body.data.work.volumes[0].chapters[0]).toMatchObject({ chapterType: "番外" });
   });
 
   it("将 Markdown 正文压缩为 ZIP 下载", async () => {
@@ -1666,6 +1671,9 @@ describe("作品、导入和章节版本 API", () => {
       .attach("file", Buffer.from("第一卷 启航\n第一章 信号\n初版正文。"), "v1.txt")
       .expect(201);
 
+    const initialTree = await request(runtime.app).get(`/api/works/${workId}`).expect(200);
+    await request(runtime.app).patch(`/api/chapters/${initialTree.body.data.volumes[0].chapters[0].id}`).send({ chapterType: "番外" }).expect(200);
+
     await request(runtime.app)
       .post(`/api/works/${workId}/import`)
       .attach("file", Buffer.from("第一卷 启航\n第一章 信号\n改写后的正文。"), "v2.txt")
@@ -1693,6 +1701,7 @@ describe("作品、导入和章节版本 API", () => {
     expect(JSON.stringify(restored.body)).not.toContain("初版正文。");
     const restoredChapterDetails = await request(runtime.app).get(`/api/chapters/${restoredChapter.id}`).expect(200);
     expect(restoredChapterDetails.body.data.content).toBe("初版正文。");
+    expect(restoredChapterDetails.body.data.chapterType).toBe("番外");
 
     const fileVersionsAfter = await request(runtime.app).get(`/api/works/${workId}/file-versions`).expect(200);
     expect(fileVersionsAfter.body.data[0].fileType).toBe("snapshot");

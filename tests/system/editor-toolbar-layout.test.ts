@@ -140,6 +140,9 @@ describe("编辑器工具栏布局", () => {
     expect(application.text).toContain('data-volume-title-renumber>重新编号本卷</button>');
     expect(page.text).toContain("feature=chapter-auto-title-menu-v1");
     expect(page.text).toContain("feature=chapter-insert-menu-v1");
+    expect(page.text).toContain('role="menuitemradio" data-chapter-type="番外">番外</button>');
+    expect(page.text).toContain('<option value="番外">番外</option>');
+    expect(page.text).toContain("feature=chapter-extra-type-v1");
     expect(styles.text).toContain(".chapter-type-menu { position: fixed; z-index: 80; width: 220px;");
     expect(application.text).toContain("function openVolumeTitleNumberingDialog(");
     expect(application.text).toContain("async function renumberVolumeChapterTitles(");
