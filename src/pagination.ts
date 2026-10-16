@@ -39,7 +39,7 @@ export function parsePagination(query: unknown): Pagination | undefined {
     throw new AppError(400, "INVALID_PAGINATION", "分页参数不能重复传入");
   }
   const page = pageValue === undefined ? 1 : positiveInteger(pageValue, "page", 100_000);
-  const limit = limitValue === undefined ? 30 : positiveInteger(limitValue, "limit", 100);
+  const limit = limitValue === undefined ? 20 : positiveInteger(limitValue, "limit", 100);
   return { page, limit, offset: (page - 1) * limit };
 }
 

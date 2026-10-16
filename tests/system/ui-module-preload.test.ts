@@ -38,7 +38,7 @@ describe("工作台模块图预加载", () => {
     expect(preloadHrefs).toContain("/toast-stack.js?v=20260909-toast-stack-v2");
     expect(preloadHrefs).toContain("/stream-markdown.js?v=20260912-stream-render-v2");
     expect(preloadHrefs).toContain("/ai-render-scheduler.js?v=20260912-stream-render-v2");
-    expect(preloadHrefs).toContain("/im.js?v=20260904-im-judge-outcomes-v106");
+    expect(preloadHrefs).toContain("/im.js?v=20260904-im-judge-outcomes-v106&amp;feature=page-size-20-v1");
     expect(preloadHrefs).toContain("/chapter-dialog-keyboard.js?v=20261007-chapter-create-enter-noop-v1");
     expect(page.text.indexOf('rel="modulepreload"')).toBeLessThan(page.text.indexOf("</head>"));
   });

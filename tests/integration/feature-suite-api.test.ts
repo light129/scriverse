@@ -804,7 +804,7 @@ describe("书架、别名、大纲伏笔和一致性守卫 API", () => {
     expect(response.body.data).toMatchObject({
       workId,
       page: 1,
-      limit: 30,
+      limit: 20,
       itemCount: 4,
       total: 4,
       pageCount: 1,
@@ -1060,7 +1060,7 @@ describe("书架、别名、大纲伏笔和一致性守卫 API", () => {
     const startedAt = performance.now();
     const sorted = await request(runtime.app).get(`/api/works/${workId}/outline-board?sort=foreshadows`).expect(200);
     const elapsedMs = performance.now() - startedAt;
-    expect(sorted.body.data).toMatchObject({ total: 2_000, itemCount: 30, hasMore: true });
+    expect(sorted.body.data).toMatchObject({ total: 2_000, itemCount: 20, hasMore: true });
     expect(sorted.body.data.stats).toMatchObject({ foreshadowCount: 20_000, unresolvedForeshadowCount: 10_000 });
     expect(elapsedMs).toBeLessThan(3_000);
   });
@@ -1116,14 +1116,14 @@ describe("书架、别名、大纲伏笔和一致性守卫 API", () => {
     const serialized = JSON.stringify(initial.body.data);
     expect(initial.body.data).toMatchObject({
       page: 1,
-      limit: 30,
-      itemCount: 30,
+      limit: 20,
+      itemCount: 20,
       total: 5_000,
       hasMore: true,
       nextPage: 2,
       stats: { chapterCount: 5_000, outlinedChapterCount: 500, foreshadowCount: 1, unresolvedForeshadowCount: 1 }
     });
-    expect(initial.body.data.volumes.flatMap((volume: { chapters: unknown[] }) => volume.chapters)).toHaveLength(30);
+    expect(initial.body.data.volumes.flatMap((volume: { chapters: unknown[] }) => volume.chapters)).toHaveLength(20);
     expect(initial.body.data.volumes).toContainEqual(expect.objectContaining({ id: emptyVolume.body.data.id, chapters: [] }));
     expect(Buffer.byteLength(serialized)).toBeLessThan(150_000);
     expect(serialized).not.toContain("LARGE_BOARD_PROSE_SECRET");

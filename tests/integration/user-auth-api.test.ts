@@ -3907,17 +3907,17 @@ describe("用户、作品权限与操作者追踪 API", () => {
       toastPosition: "bottom-right",
       galaxyFrameRate: 30,
       pageSizes: {
-        settings: 30,
-        characters: 30,
-        races: 30,
-        organizations: 30,
-        timeline: 30,
-        outlines: 30,
-        relationships: 30,
-        comments: 30,
-        reviews: 30,
-        analysisTasks: 30,
-        fileVersions: 30
+        settings: 20,
+        characters: 20,
+        races: 20,
+        organizations: 20,
+        timeline: 20,
+        outlines: 20,
+        relationships: 20,
+        comments: 20,
+        reviews: 20,
+        analysisTasks: 20,
+        fileVersions: 20
       }
     });
     await writer.agent.get("/api/platform/ui-settings").expect(403);

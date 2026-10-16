@@ -34,8 +34,8 @@ describe("管理员 Chat 对话列表界面", () => {
 
     expect(application.text).toContain('$("#admin-ai-conversations-button").classList.toggle("hidden", !isAdmin);');
     expect(application.text).toContain('async function openAdminAiConversationsDialog()');
-    expect(application.text).toContain('apiPage(adminAiConversationListPath(), page, 30)');
-    expect(application.text).toContain('apiAllPages("/api/users", 100)');
+    expect(application.text).toContain('apiPage(adminAiConversationListPath(), page)');
+    expect(application.text).toContain('apiAllPages("/api/users")');
     expect(application.text).toContain('adminAiConversationFiltersOpen = !adminAiConversationFiltersOpen;');
     expect(application.text).toContain('setAttribute("aria-expanded", String(adminAiConversationFiltersOpen))');
     expect(application.text).toContain('class="admin-ai-conversation-row"');

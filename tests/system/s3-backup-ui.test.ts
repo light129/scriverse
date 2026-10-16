@@ -59,7 +59,7 @@ describe("S3 系统备份界面", () => {
     expect(application.text).toContain('if (restoreToggleFocus && !$("#s3-backup-key-dialog").open) toggle.focus()');
     expect(application.text).toContain('$("#s3-backup-encryption-toggle").focus()');
     expect(application.text).toContain('api("/api/platform/backups/targets")');
-    expect(application.text).toContain('api("/api/platform/backups/runs?limit=100")');
+    expect(application.text).toContain('api("/api/platform/backups/runs?limit=20")');
     expect(application.text).toContain('api("/api/platform/backups/run"');
     expect(application.text).toContain('collectS3BackupRunTransitions(');
     expect(application.text).toContain('toast(s3BackupFailureToast(run), "error")');

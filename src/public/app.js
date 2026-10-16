@@ -6,7 +6,7 @@ import { renderMarkdown } from "/markdown.js?v=20260912-stream-render-v2";
 import { createStreamingMarkdownRenderer } from "/stream-markdown.js?v=20260912-stream-render-v2";
 import { createAiRenderScheduler } from "/ai-render-scheduler.js?v=20260912-stream-render-v2";
 import { shouldFollowAiFeedAfterScroll } from "/ai-feed-scroll.js?v=20261013-manual-scroll-intent-v1";
-import { createImWorkspace } from "/im.js?v=20260904-im-judge-outcomes-v106";
+import { createImWorkspace } from "/im.js?v=20260904-im-judge-outcomes-v106&feature=page-size-20-v1";
 import { findAiMention, listAiMentionOptions, mergeAiReferenceScope } from "/ai-mentions.js?v=20260811-user-message-mentions-v1";
 import { applyAiSkillCommand, findAiSkillCommand, listAiSlashOptions } from "/ai-skill-menu.js?v=20260921-ai-compact-slash-command-v2";
 import {
@@ -171,18 +171,18 @@ const MIN_AI_ANALYSIS_TIMEOUT_SECONDS = 30;
 const MAX_AI_ANALYSIS_TIMEOUT_SECONDS = 3_600;
 
 const defaultPageSizes = Object.freeze({
-  drafts: 30,
-  settings: 30,
-  characters: 30,
-  races: 30,
-  organizations: 30,
-  timeline: 30,
-  outlines: 30,
-  relationships: 30,
-  comments: 30,
-  reviews: 30,
-  analysisTasks: 30,
-  fileVersions: 30
+  drafts: 20,
+  settings: 20,
+  characters: 20,
+  races: 20,
+  organizations: 20,
+  timeline: 20,
+  outlines: 20,
+  relationships: 20,
+  comments: 20,
+  reviews: 20,
+  analysisTasks: 20,
+  fileVersions: 20
 });
 const GALAXY_MOTION_MODE_STORAGE_KEY = "scriverse.galaxy-motion-mode.v1";
 
@@ -200,7 +200,7 @@ function persistGalaxyMotionMode(mode) {
   return normalized;
 }
 
-function normalizePageSize(value, fallback = 30) {
+function normalizePageSize(value, fallback = 20) {
   const candidate = Number(value);
   return Number.isInteger(candidate) && candidate >= 10 && candidate <= 100 ? candidate : fallback;
 }
@@ -1279,6 +1279,7 @@ let aiConversationsLoadPromise = null;
 let aiConversationsLoadWorkId = null;
 let latestAiContextUsage = null;
 const aiConversationHistoryPageLimit = 20;
+const aiConversationMessagePageLimit = 20;
 let aiConversationHistoryPage = { page: 1, limit: aiConversationHistoryPageLimit, hasMore: false, nextPage: null };
 let workScopedUiGeneration = 0;
 let workDirectoryRevision = 0;
@@ -4489,7 +4490,7 @@ async function reloadAiQuestionConversation(conversationId) {
   if (!conversationId) return null;
   const tab = aiChatTabManager.findByConversation(conversationId);
   if (!tab) return openAiConversation(conversationId);
-  const conversation = await api(`/api/ai-conversations/${encodeURIComponent(conversationId)}?page=1&limit=100`);
+  const conversation = await api(`/api/ai-conversations/${encodeURIComponent(conversationId)}?page=1&limit=${aiConversationMessagePageLimit}`);
   if (String(conversation.workId ?? "") !== String(state.work?.id ?? "")) throw new Error("AI 对话不属于当前作品");
   upsertAiConversationSummary(conversation);
   applyConversationToAiChatTab(tab, conversation);
@@ -5283,7 +5284,7 @@ async function openAiConversation(conversationId, hideHistory = true, focusMessa
   }
   const navigation = beginAiConversationNavigation("已切换 AI 对话", "切换会话");
   try {
-    const parameters = new URLSearchParams({ page: "1", limit: "100" });
+    const parameters = new URLSearchParams({ page: "1", limit: String(aiConversationMessagePageLimit) });
     if (focusMessageId) parameters.set("messageId", String(focusMessageId));
     if (roleplayMemorySourceId) parameters.set("roleplayMemorySourceId", String(roleplayMemorySourceId));
     const [conversation] = await Promise.all([
@@ -5329,6 +5330,98 @@ function aiConversationMessageHasImages(message) {
     && message.metadata.chatImageAttachmentIds.some((attachmentId) => String(attachmentId ?? "").trim().length > 0);
 }
 
+function renderAiConversationMessagePagination(tab) {
+  tab.feed.querySelector("[data-ai-message-pagination]")?.remove();
+  const page = tab.messagesPage;
+  if (!page || (!page.hasMore && !tab.messageHistoryStartsAfterLatest)) return;
+  const navigation = document.createElement("nav");
+  navigation.className = "module-pagination";
+  navigation.dataset.aiMessagePagination = "";
+  navigation.setAttribute("aria-label", "AI 消息分页");
+  if (page.hasMore) {
+    const earlier = document.createElement("button");
+    earlier.type = "button";
+    earlier.textContent = tab.messagePageLoading ? "正在加载……" : "加载更早消息";
+    earlier.disabled = tab.messagePageLoading === true;
+    earlier.addEventListener("click", () => {
+      void loadAiConversationMessagePage(tab, page.nextPage, true)
+        .catch((error) => toast(`加载历史消息失败：${error.message}`, "error"));
+    });
+    navigation.append(earlier);
+  }
+  if (tab.messageHistoryStartsAfterLatest) {
+    const latest = document.createElement("button");
+    latest.type = "button";
+    latest.textContent = "返回最新消息";
+    latest.disabled = tab.messagePageLoading === true;
+    latest.addEventListener("click", () => {
+      void loadAiConversationMessagePage(tab, 1)
+        .catch((error) => toast(`加载最新消息失败：${error.message}`, "error"));
+    });
+    navigation.append(latest);
+  }
+  tab.feed.prepend(navigation);
+}
+
+async function loadAiConversationMessagePage(tab, page, prepend = false) {
+  if (tab.messagePageLoading || !tab.conversationId || aiRequestManager.hasActive(tab.id)) return;
+  const conversationId = tab.conversationId;
+  const generation = tab.messageHistoryGeneration;
+  tab.messagePageLoading = true;
+  renderAiConversationMessagePagination(tab);
+  try {
+    const conversation = await api(`/api/ai-conversations/${encodeURIComponent(conversationId)}?page=${page}&limit=${aiConversationMessagePageLimit}`);
+    if (aiChatTabManager.get(tab.id) !== tab || tab.conversationId !== conversationId
+      || tab.messageHistoryGeneration !== generation || tab.workId !== state.work?.id
+      || aiRequestManager.hasActive(tab.id)) return;
+    if (String(conversation.workId ?? "") !== tab.workId) throw new Error("AI 对话不属于当前作品");
+    if (!prepend) {
+      renderAiConversationMessages(tab, conversation);
+      scrollAiFeedToBottom(tab.feed, { force: true });
+      return;
+    }
+    const feed = tab.feed;
+    const previousHeight = feed.scrollHeight;
+    const previousTop = feed.scrollTop;
+    const firstMessage = feed.querySelector("[data-message-id]");
+    const knownIds = new Set([...feed.querySelectorAll("[data-message-id]")].map((message) => message.dataset.messageId));
+    const historyFeed = document.createElement("div");
+    const historyTab = { ...tab, id: null, feed: historyFeed, lastMessageAt: null };
+    for (const message of conversation.messages ?? []) {
+      if (knownIds.has(String(message.id))) continue;
+      appendMessage(message.role, message.content, message.citations, message.createdAt, message.metadata, message.id, { tab: historyTab });
+    }
+    aiFeedAutoScrollStates.set(feed, false);
+    for (const message of [...historyFeed.children]) feed.insertBefore(message, firstMessage);
+    tab.messagesPage = conversation.messagesPage;
+    if (conversation.hasCompactedSummary) {
+      renderConversationCompactionDivider(conversation.compactedMessageCount, conversation.messageCount, feed, conversation);
+    }
+    renderAiConversationMessagePagination(tab);
+    feed.scrollTop = previousTop + feed.scrollHeight - previousHeight;
+  } finally {
+    if (tab.messageHistoryGeneration === generation) {
+      tab.messagePageLoading = false;
+      renderAiConversationMessagePagination(tab);
+    }
+  }
+}
+
+function renderAiConversationMessages(tab, conversation) {
+  tab.messageHistoryGeneration = (tab.messageHistoryGeneration ?? 0) + 1;
+  tab.messagePageLoading = false;
+  tab.messagesPage = conversation.messagesPage ?? null;
+  tab.messageHistoryStartsAfterLatest = Number(conversation.messagesPage?.page ?? 1) > 1;
+  resetAiFeed(tab.feed, tab.roleplayCharacter, tab.roleplayUserCharacter);
+  for (const message of conversation.messages ?? []) {
+    appendMessage(message.role, message.content, message.citations, message.createdAt, message.metadata, message.id, { tab });
+  }
+  if (conversation.hasCompactedSummary) {
+    renderConversationCompactionDivider(conversation.compactedMessageCount, conversation.messageCount, tab.feed, conversation);
+  }
+  renderAiConversationMessagePagination(tab);
+}
+
 function applyConversationToAiChatTab(tab, conversation) {
   tab.workId = String(conversation.workId ?? state.work?.id ?? "");
   tab.conversationId = conversation.id;
@@ -5354,13 +5447,7 @@ function applyConversationToAiChatTab(tab, conversation) {
   };
   tab.contextUsage = null;
   tab.contextWarning = conversation.contextWarningPending === true;
-  resetAiFeed(tab.feed, tab.roleplayCharacter, tab.roleplayUserCharacter);
-  for (const message of conversation.messages ?? []) {
-    appendMessage(message.role, message.content, message.citations, message.createdAt, message.metadata, message.id, { tab });
-  }
-  if (conversation.hasCompactedSummary) {
-    renderConversationCompactionDivider(conversation.compactedMessageCount, conversation.messageCount, tab.feed, conversation);
-  }
+  renderAiConversationMessages(tab, conversation);
   renderAiChatTabs();
 }
 
@@ -6937,14 +7024,14 @@ async function openAiToolCallSettings() {
   if (input instanceof HTMLInputElement) input.focus({ preventScroll: true });
 }
 
-async function apiPage(path, page = 1, limit = 30) {
+async function apiPage(path, page = 1, limit = 20) {
   const separator = path.includes("?") ? "&" : "?";
   const result = await api(`${path}${separator}page=${page}&limit=${limit}`);
   if (Array.isArray(result)) return { items: result, page, limit, hasMore: false, nextPage: null };
   return result;
 }
 
-async function apiAllPages(path, limit = 100) {
+async function apiAllPages(path, limit = 20) {
   const items = [];
   let page = 1;
   while (true) {
@@ -6965,11 +7052,11 @@ function moduleApi(module, path, options = {}) {
   return cachedModuleRequest(module, `api:${path}`, () => api(path), options);
 }
 
-function moduleApiPage(module, path, page = 1, limit = 30, options = {}) {
+function moduleApiPage(module, path, page = 1, limit = 20, options = {}) {
   return cachedModuleRequest(module, `page:${path}:${page}:${limit}`, () => apiPage(path, page, limit), options);
 }
 
-function moduleApiAllPages(module, path, limit = 100, options = {}) {
+function moduleApiAllPages(module, path, limit = 20, options = {}) {
   return cachedModuleRequest(module, `all:${path}:${limit}`, () => apiAllPages(path, limit), options);
 }
 
@@ -7307,7 +7394,7 @@ function applyPlatformUiSettings(settings) {
 }
 
 function pageSizeFor(module) {
-  return normalizePageSize(state.uiSettings.pageSizes[module], defaultPageSizes[module] ?? 30);
+  return normalizePageSize(state.uiSettings.pageSizes[module], defaultPageSizes[module] ?? 20);
 }
 
 function paginateModuleItems(items, page, sizeKey) {
@@ -8370,7 +8457,7 @@ function renderWorkAuditRecords() {
 
 async function loadWorkAuditPage(page = 1, append = false) {
   if (!state.work) return;
-  const result = await apiPage(`/api/works/${encodeURIComponent(state.work.id)}/audit-logs`, page, 30);
+  const result = await apiPage(`/api/works/${encodeURIComponent(state.work.id)}/audit-logs`, page);
   workAuditRecords = append ? [...workAuditRecords, ...result.items] : result.items;
   workAuditNextPage = result.nextPage;
   renderWorkAuditRecords();
@@ -8576,7 +8663,7 @@ function adminAiConversationListPath() {
 }
 
 async function loadAdminAiConversationPage(page = 1, append = false) {
-  const result = await apiPage(adminAiConversationListPath(), page, 30);
+  const result = await apiPage(adminAiConversationListPath(), page);
   adminAiConversationRecords = append ? [...adminAiConversationRecords, ...result.items] : result.items;
   adminAiConversationNextPage = result.nextPage;
   renderAdminAiConversations();
@@ -8597,7 +8684,7 @@ async function openAdminAiConversationsDialog() {
   $("#admin-ai-conversations-summary").textContent = "正在读取对话……";
   $("#admin-ai-conversations-dialog").showModal();
   try {
-    const [works, users] = await Promise.all([apiAllPages("/api/works", 100), apiAllPages("/api/users", 100)]);
+    const [works, users] = await Promise.all([apiAllPages("/api/works"), apiAllPages("/api/users")]);
     renderAdminAiConversationFilterOptions(works, users);
     await loadAdminAiConversationPage();
   } catch (error) {
@@ -8724,7 +8811,7 @@ async function loadS3BackupData({ loading = false } = {}) {
   }
   const [targets, runs, encryption] = await Promise.all([
     api("/api/platform/backups/targets"),
-    api("/api/platform/backups/runs?limit=30"),
+    api("/api/platform/backups/runs?limit=20"),
     api("/api/platform/backups/encryption")
   ]);
   s3BackupTargets = targets;
@@ -8953,7 +9040,7 @@ async function refreshS3BackupEvents({ announce = true } = {}) {
   s3BackupPollTimer = null;
   const requestId = ++s3BackupPollRequest;
   try {
-    const result = await api("/api/platform/backups/runs?limit=100");
+    const result = await api("/api/platform/backups/runs?limit=20");
     if (requestId !== s3BackupPollRequest || state.user?.role !== "admin") return;
     const transitions = collectS3BackupRunTransitions(
       s3BackupRunSnapshots,
@@ -8966,7 +9053,7 @@ async function refreshS3BackupEvents({ announce = true } = {}) {
     }
     s3BackupRunsInitialized = true;
     if ($("#s3-backup-dialog").open) {
-      s3BackupRuns = result.items.slice(0, 30);
+      s3BackupRuns = result.items;
       renderS3BackupRuns();
       s3BackupTargets = await api("/api/platform/backups/targets");
       renderS3BackupTargets();
@@ -9713,7 +9800,7 @@ async function loadVolumeChapters(volumeId) {
   renderTree([volumeId]);
   const request = (async () => {
     try {
-      const chapters = await apiAllPages(`/api/volumes/${encodeURIComponent(volumeId)}/chapters`, 100);
+      const chapters = await apiAllPages(`/api/volumes/${encodeURIComponent(volumeId)}/chapters`);
       if (state.work?.id !== workId || generation !== workScopedUiGeneration || directoryRevision !== workDirectoryRevision) return;
       const volume = state.work.volumes.find((item) => item.id === volumeId);
       if (!volume) return;
@@ -14640,7 +14727,7 @@ async function refreshBackgroundTaskCenter({ announce = true } = {}) {
   const readIndex = dialogOpen && canReadModule("ai-settings");
   const [taskResult, indexResult] = await Promise.all([
     readTasks
-      ? api(`/api/works/${encodeURIComponent(workId)}/tasks?page=1&limit=30`)
+      ? api(`/api/works/${encodeURIComponent(workId)}/tasks?page=1&limit=20`)
         .then((value) => ({ value }))
         .catch((error) => ({ error }))
       : Promise.resolve(null),

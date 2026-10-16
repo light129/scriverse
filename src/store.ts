@@ -236,25 +236,29 @@ const galaxyFrameRates = [24, 30, 60, 90, 120, 144, 165, 240] as const;
 type GalaxyFrameRate = typeof galaxyFrameRates[number];
 
 const defaultPlatformPageSizes: PlatformPageSizes = {
-  drafts: 30,
-  settings: 30,
-  characters: 30,
-  races: 30,
-  organizations: 30,
-  timeline: 30,
-  outlines: 30,
-  relationships: 30,
-  comments: 30,
-  reviews: 30,
-  analysisTasks: 30,
-  fileVersions: 30
+  drafts: 20,
+  settings: 20,
+  characters: 20,
+  races: 20,
+  organizations: 20,
+  timeline: 20,
+  outlines: 20,
+  relationships: 20,
+  comments: 20,
+  reviews: 20,
+  analysisTasks: 20,
+  fileVersions: 20
 };
 
 function platformPageSizes(value: unknown): PlatformPageSizes {
   const stored = typeof value === "string"
     ? json<Record<string, unknown>>(value, {})
     : value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  // 旧数据库会把默认的 30 条写入设置，未定制的配置应跟随新的默认值。
+  const legacyDefaults = Object.keys(stored).length === 3
+    && stored.characters === 30 && stored.analysisTasks === 30 && stored.fileVersions === 30;
   const pageSize = (key: keyof PlatformPageSizes): number => {
+    if (legacyDefaults) return defaultPlatformPageSizes[key];
     const candidate = Number(stored[key]);
     return Number.isInteger(candidate) && candidate >= 10 && candidate <= 100
       ? candidate
