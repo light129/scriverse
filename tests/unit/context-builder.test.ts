@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { ContextBuilder, estimateAiTokens } from "../../src/ai.js";
+import type { ContextScope } from "../../src/domain.js";
 import { createTestRuntime, createWork, seedChapter } from "../helpers.js";
 
 describe("AI 上下文组装", () => {
@@ -181,6 +182,34 @@ describe("AI 上下文组装", () => {
     });
     expect(volumeContext).toContain("第一章正文范围标记");
     expect(volumeContext).toContain("第二章正文范围标记");
+  });
+
+  it.each(["正文", "番外", "设定", "其他"] as const)("所有 AI 章节上下文都标明作者设置的类型：%s", async (chapterType) => {
+    const runtime = createTestRuntime();
+    runtimes.push(runtime);
+    const workId = String((await createWork(runtime, "章节类型上下文")).id);
+    const volumeId = String(runtime.store.createVolume(workId, { title: "第一卷" }).id);
+    const first = runtime.store.createChapter(workId, { volumeId, title: "第一章", content: "第一章原文。", chapterType });
+    const second = runtime.store.createChapter(workId, { volumeId, title: "第二章", content: "第二章原文。", chapterType });
+    const scopes: ContextScope[] = [
+      { type: "chapter", chapterId: String(second.id), includeSettingInfo: false },
+      { type: "selection", chapterId: String(first.id), selection: "第一章原文。", includeSettingInfo: false },
+      { type: "volume", volumeId, includeSettingInfo: false },
+      { type: "book", includeSettingInfo: false },
+      { type: "none", chapterIds: [String(first.id)] },
+      { type: "entities", includeBookSummary: true }
+    ];
+    const builder = new ContextBuilder(runtime.store);
+    for (const scope of scopes) {
+      expect(builder.build(workId, scope)).toContain(`章节类型 ${chapterType}`);
+    }
+    expect(builder.build(workId, scopes[0]!)).toContain(`上一章节结尾：第一章 | 版本 1 | 章节类型 ${chapterType}`);
+    const analysisChunks = runtime.ai as unknown as {
+      buildChapterChunks: (chapters: Record<string, unknown>[]) => Array<{ text: string }>;
+      buildTimelineChapterChunks: (chapters: Record<string, unknown>[]) => Array<{ text: string }>;
+    };
+    expect(analysisChunks.buildChapterChunks([first])[0]?.text).toContain(`chapterType="${chapterType}"`);
+    expect(analysisChunks.buildTimelineChapterChunks([first])[0]?.text).toContain(`chapterType="${chapterType}"`);
   });
 
   it("所有 AI 正文范围都排除作者的话章节", async () => {
@@ -452,6 +481,7 @@ describe("AI 上下文组装", () => {
     expect(context).toContain("本卷其余章节概要已按预算折叠");
     expect(context).toContain("早期概要");
     expect(context).toContain("保留最新概要");
+    expect(context).toContain("章节类型 正文");
     expect(estimateAiTokens(context)).toBeLessThan(160);
   });
 

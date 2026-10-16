@@ -2180,6 +2180,7 @@ describe("AI 供应商、模型与建议 API", () => {
           chapterIds: [chapterId],
           chapterStoryOrders: [{
             chapterId,
+            chapterType: "正文",
             storyOrder: expect.objectContaining({
               volume: expect.objectContaining({ storyOrder: 0 }),
               chapter: expect.objectContaining({ order: 0 })
@@ -2277,6 +2278,65 @@ describe("AI 供应商、模型与建议 API", () => {
     expect(response.body.data.content).toBe("工具参数组合均已处理。");
     expect(response.body.data.toolCalls).toHaveLength(calls.length);
     expect(response.body.data.toolCalls.every((call: { status: string }) => call.status === "completed")).toBe(true);
+  });
+
+  it.each(["正文", "番外", "设定", "其他"] as const)("AI 工具实际回传模型的章节结果包含类型：%s", async (chapterType) => {
+    runtime.store.saveChapter(chapterId, { chapterType });
+    const { providerId, modelId } = await configureAi();
+    await request(runtime.app).post(`/api/providers/${providerId}/test`).send({}).expect(200);
+    runtime.store.updateWorkAiSettings(workId, { agentTools: ["story_index", "read_chapters", "grep", "semantic_search_story"] });
+    const calls = [
+      { id: "typed-index", name: "story_index", arguments: {} },
+      { id: "typed-summary", name: "read_chapters", arguments: { chapterIds: [chapterId], include: "summary" } },
+      { id: "typed-content", name: "read_chapters", arguments: { chapterIds: [chapterId], include: "content" } },
+      { id: "typed-both", name: "read_chapters", arguments: { chapterIds: [chapterId], include: "both" } },
+      { id: "typed-grep", name: "grep", arguments: { keyword: "林舟" } },
+      { id: "typed-semantic", name: "semantic_search_story", arguments: { query: "林舟", modules: ["prose"] } }
+    ];
+    let completionCount = 0;
+    fetchMock.mockImplementation(async (input, init) => {
+      if (String(input).endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "mock-novel-model" }] }), { status: 200 });
+      completionCount += 1;
+      const body = JSON.parse(String(init?.body)) as {
+        messages: Array<{ role: string; tool_call_id?: string; content?: string }>;
+        tools: Array<{ function: { name: string; description: string } }>;
+      };
+      if (completionCount === 1) {
+        expect(body.messages[1]?.content).toContain(`章节类型 ${chapterType}`);
+        const chapterTools = body.tools.filter((tool) => ["story_index", "read_chapters", "grep", "semantic_search_story"].includes(tool.function.name));
+        expect(chapterTools).toHaveLength(4);
+        for (const tool of chapterTools) expect(tool.function.description).toContain("chapterType");
+        return new Response(JSON.stringify({ choices: [{ message: { content: null, tool_calls: calls.map((call) => ({
+          id: call.id, type: "function", function: { name: call.name, arguments: JSON.stringify(call.arguments) }
+        })) } }] }), { status: 200 });
+      }
+      const results = new Map(body.messages.filter((message) => message.role === "tool").map((message) => [
+        message.tool_call_id, JSON.parse(message.content ?? "{}") as Record<string, unknown>
+      ]));
+      expect(results.size).toBe(calls.length);
+      expect(results.get("typed-index")).toMatchObject({ data: {
+        chapters: [{ id: chapterId, chapterType, storyOrder: { chapter: { type: chapterType } } }],
+        latestChaptersByStructure: chapterType === "正文" ? [expect.objectContaining({ id: chapterId, chapterType })] : []
+      } });
+      for (const id of ["typed-summary", "typed-content", "typed-both"]) {
+        expect(results.get(id)).toMatchObject({ data: { chapters: [{ chapterId, chapterType }] } });
+      }
+      expect(results.get("typed-grep")).toMatchObject({ data: {
+        matches: [expect.objectContaining({ chapterId, chapterType })],
+        latestOccurrences: { byStructure: [expect.objectContaining({ chapterId, chapterType })] }
+      } });
+      expect(results.get("typed-semantic")).toMatchObject({ data: {
+        semanticUsed: false,
+        matches: expect.arrayContaining([expect.objectContaining({ type: "chapter", id: chapterId, chapterType })])
+      } });
+      return new Response(JSON.stringify({ choices: [{ message: { content: "已读取章节类型。" } }] }), { status: 200 });
+    });
+
+    const response = await request(runtime.app).post(`/api/works/${workId}/suggestions`).send({
+      taskType: "chat", instruction: "读取章节信息并确认章节类型。", scope: { type: "chapter", chapterId }, modelId
+    }).expect(201);
+    expect(response.body.data.content).toBe("已读取章节类型。");
+    expect(completionCount).toBe(2);
   });
 
   it("所有 AI 查询工具都排除作者的话章节", async () => {
@@ -3035,6 +3095,7 @@ describe("AI 供应商、模型与建议 API", () => {
         expect(toolMessages[0]).toContain('"isDead":false');
         expect(toolMessages[0]).toContain("第一次看见星舰");
         expect(toolMessages[0]).toContain("林舟启动了飞船");
+        expect(toolMessages[0]).toContain('"chapterType":"正文"');
         expect(toolMessages[0]).toContain('"storyOrdering"');
         expect(toolMessages[0]).toContain('"timeSort":12');
         expect(toolMessages[0]).not.toContain("其他角色的私密档案");
@@ -3061,6 +3122,7 @@ describe("AI 供应商、模型与建议 API", () => {
         expect(toolMessages[3]).not.toContain("跃迁后必须冷却十二小时");
         expect(toolMessages[3]).not.toContain("深海禁术");
         expect(toolMessages[4]).toContain("林舟启动了飞船");
+        expect(toolMessages[4]).toContain('"chapterType":"正文"');
         expect(toolMessages[4]).toContain('"storyOrdering"');
         expect(toolMessages[4]).toContain('"storyOrder"');
         expect(toolMessages[4]).toContain('"latestOccurrences"');

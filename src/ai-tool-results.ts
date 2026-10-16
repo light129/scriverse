@@ -114,6 +114,7 @@ const TOOL_RESULT_RECORD_MAX_CHARS = 6_000;
 const TOOL_RESULT_IDENTITY_FIELDS = new Set([
   "id",
   "chapterId",
+  "chapterType",
   "sectionId",
   "characterId",
   "characterName",

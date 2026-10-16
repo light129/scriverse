@@ -800,6 +800,7 @@ export type StoryIndexChapterPage = {
   latestChaptersByStructure: Array<{
     id: string;
     title: string;
+    chapterType: ChapterType;
     versionNo: number;
     storyOrder: ChapterStoryOrderDetails;
     summary: string;
@@ -807,6 +808,7 @@ export type StoryIndexChapterPage = {
   chapters: Array<{
     id: string;
     title: string;
+    chapterType: ChapterType;
     versionNo: number;
     storyOrder: ChapterStoryOrderDetails;
     summary: string;
@@ -842,6 +844,7 @@ export type ChapterStoryOrderDetails = {
 export type ChapterParagraphMatch = {
   chapterId: string;
   chapterTitle: string;
+  chapterType?: ChapterType;
   paragraph: string;
   paragraphOrder?: number;
   storyOrder?: ChapterStoryOrderDetails;
@@ -2645,7 +2648,7 @@ export class Store {
       workId
     );
     const chapterRows = this.db.all(
-      `SELECT chapter.id, chapter.title, chapter.version_no
+      `SELECT chapter.id, chapter.title, chapter.version_no, chapter.chapter_type
        FROM chapters chapter
        JOIN volumes volume ON volume.id = chapter.volume_id
        WHERE chapter.work_id = ? AND chapter.deleted_at IS NULL AND volume.deleted_at IS NULL${authorNoteFilter}
@@ -2656,7 +2659,7 @@ export class Store {
       offset
     );
     const latestChapterRows = this.db.all(
-      `SELECT chapter.id, chapter.title, chapter.version_no
+      `SELECT chapter.id, chapter.title, chapter.version_no, chapter.chapter_type
        FROM chapters chapter
        JOIN volumes volume ON volume.id = chapter.volume_id
        WHERE chapter.work_id = ? AND chapter.deleted_at IS NULL AND volume.deleted_at IS NULL
@@ -2713,6 +2716,7 @@ export class Store {
           title: requiredString(row, "title"),
           versionNo: numberValue(row, "version_no"),
           storyOrder: storyOrders.get(chapterId) as ChapterStoryOrderDetails,
+          chapterType: requiredString(row, "chapter_type") as ChapterType,
           summary: summaries.get(chapterId) ?? ""
         };
       }),
@@ -2723,6 +2727,7 @@ export class Store {
           title: requiredString(row, "title"),
           versionNo: numberValue(row, "version_no"),
           storyOrder: storyOrders.get(chapterId) as ChapterStoryOrderDetails,
+          chapterType: requiredString(row, "chapter_type") as ChapterType,
           summary: summaries.get(chapterId) ?? ""
         };
       })
@@ -4852,7 +4857,7 @@ export class Store {
         chapterTitle: requiredString(row, "chapter_title"),
         paragraph: requiredString(row, "content"),
         ...(options.includeParagraphOrder ? { paragraphOrder: numberValue(row, "paragraph_order") } : {}),
-        ...(storyOrder ? { storyOrder } : {})
+        ...(storyOrder ? { storyOrder, chapterType: storyOrder.chapter.type } : {})
       };
     });
   }
