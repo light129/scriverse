@@ -3806,7 +3806,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     if (input.autoRunStabilityDelayMinutes !== undefined) ai.rescheduleChapterAnalysisTasks(workId);
     data(response, updated);
   });
-  app.get("/api/works/:workId/ai-conversations", (request, response) => {
+  app.get("/api/works/:workId/ai-conversations", compression(), (request: Request<{ workId: string }>, response) => {
     const pagination = parsePagination({
       page: request.query.page ?? "1",
       limit: request.query.limit ?? "20"

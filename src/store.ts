@@ -235,6 +235,14 @@ type PlatformPageSizes = {
 const galaxyFrameRates = [24, 30, 60, 90, 120, 144, 165, 240] as const;
 type GalaxyFrameRate = typeof galaxyFrameRates[number];
 
+const AI_METADATA_TRIM_CHARACTERS = "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
+const AI_CONVERSATION_SUMMARY_COLUMNS = `conversation.id, conversation.work_id, conversation.title,
+  conversation.is_favorite, conversation.compacted_message_count, conversation.context_warning_at,
+  conversation.task_type, conversation.context_scope_json, conversation.scene_pin_json,
+  conversation.roleplay_character_id, conversation.roleplay_user_character_id,
+  conversation.agent_tools_json, conversation.created_at, conversation.updated_at, conversation.created_by_user_id,
+  CASE WHEN conversation.compacted_summary <> '' THEN '1' ELSE '' END AS compacted_summary`;
+
 const defaultPlatformPageSizes: PlatformPageSizes = {
   drafts: 20,
   settings: 20,
@@ -9543,9 +9551,9 @@ export class Store {
   listAiConversations(workId: string, userId?: string): Record<string, unknown>[] {
     this.getWork(workId);
     return this.db.all(
-      `SELECT conversation.*,
+      `SELECT ${AI_CONVERSATION_SUMMARY_COLUMNS},
         (SELECT COUNT(*) FROM ai_conversation_messages message WHERE message.conversation_id = conversation.id) AS message_count,
-        COALESCE((SELECT content FROM ai_conversation_messages message WHERE message.conversation_id = conversation.id ORDER BY message.created_at DESC, message.rowid DESC LIMIT 1), '') AS preview
+        COALESCE((SELECT substr(content, 1, 4096) FROM ai_conversation_messages message WHERE message.conversation_id = conversation.id ORDER BY message.created_at DESC, message.rowid DESC LIMIT 1), '') AS preview
        FROM ai_conversations conversation
        WHERE conversation.work_id = ?
          AND (? IS NULL OR conversation.created_by_user_id = ?)
@@ -9561,9 +9569,9 @@ export class Store {
     this.getWork(workId);
     const page = paginationSql(pagination);
     const rows = this.db.all(
-      `SELECT conversation.*,
+      `SELECT ${AI_CONVERSATION_SUMMARY_COLUMNS},
         (SELECT COUNT(*) FROM ai_conversation_messages message WHERE message.conversation_id = conversation.id) AS message_count,
-        COALESCE((SELECT content FROM ai_conversation_messages message WHERE message.conversation_id = conversation.id ORDER BY message.created_at DESC, message.rowid DESC LIMIT 1), '') AS preview
+        COALESCE((SELECT substr(content, 1, 4096) FROM ai_conversation_messages message WHERE message.conversation_id = conversation.id ORDER BY message.created_at DESC, message.rowid DESC LIMIT 1), '') AS preview
        FROM ai_conversations conversation
        WHERE conversation.work_id = ?
          AND (? IS NULL OR conversation.created_by_user_id = ?)
@@ -9617,7 +9625,7 @@ export class Store {
     const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
     const page = paginationSql(pagination);
     const rows = this.db.all(
-      `SELECT conversation.*,
+      `SELECT ${AI_CONVERSATION_SUMMARY_COLUMNS},
         work.title AS work_title,
         work.deleted_at AS work_deleted_at,
         creator.username AS creator_username,
@@ -9625,7 +9633,7 @@ export class Store {
         creator.role AS creator_role,
         creator.status AS creator_status,
         (SELECT COUNT(*) FROM ai_conversation_messages message WHERE message.conversation_id = conversation.id) AS message_count,
-        COALESCE((SELECT content FROM ai_conversation_messages message WHERE message.conversation_id = conversation.id ORDER BY message.created_at DESC, message.rowid DESC LIMIT 1), '') AS preview
+        COALESCE((SELECT substr(content, 1, 4096) FROM ai_conversation_messages message WHERE message.conversation_id = conversation.id ORDER BY message.created_at DESC, message.rowid DESC LIMIT 1), '') AS preview
        FROM ai_conversations conversation
        JOIN works work ON work.id = conversation.work_id
        LEFT JOIN users creator ON creator.id = conversation.created_by_user_id
@@ -9653,9 +9661,9 @@ export class Store {
 
   getAiConversationSummary(conversationId: string): Record<string, unknown> {
     const row = this.db.get(
-      `SELECT conversation.*,
+      `SELECT ${AI_CONVERSATION_SUMMARY_COLUMNS},
         (SELECT COUNT(*) FROM ai_conversation_messages message WHERE message.conversation_id = conversation.id) AS message_count,
-        COALESCE((SELECT content FROM ai_conversation_messages message WHERE message.conversation_id = conversation.id ORDER BY message.created_at DESC, message.rowid DESC LIMIT 1), '') AS preview
+        COALESCE((SELECT substr(content, 1, 4096) FROM ai_conversation_messages message WHERE message.conversation_id = conversation.id ORDER BY message.created_at DESC, message.rowid DESC LIMIT 1), '') AS preview
        FROM ai_conversations conversation
        WHERE conversation.id = ?`,
       conversationId
@@ -10182,31 +10190,34 @@ export class Store {
   }
 
   private aiConversationLockedModelId(conversationId: string): string | null {
-    const messages = this.db.all(
-      `SELECT metadata_json FROM ai_conversation_messages
+    const message = this.db.get<{ model_id: string }>(
+      `SELECT json_extract(metadata_json, '$.modelId') AS model_id FROM ai_conversation_messages
        WHERE conversation_id = ? AND role = 'user'
-       ORDER BY created_at, rowid`,
-      conversationId
+         AND CASE WHEN json_valid(metadata_json)
+           THEN json_type(metadata_json, '$.modelId') = 'text'
+             AND length(trim(json_extract(metadata_json, '$.modelId'), ?)) > 0
+           ELSE 0 END
+       ORDER BY created_at, rowid LIMIT 1`,
+      conversationId,
+      AI_METADATA_TRIM_CHARACTERS
     );
-    for (const message of messages) {
-      const metadata = json<Record<string, unknown>>(requiredString(message, "metadata_json"), {});
-      if (typeof metadata.modelId === "string" && metadata.modelId.trim()) return metadata.modelId.trim();
-    }
-    return null;
+    return message ? message.model_id.trim() : null;
   }
 
   private aiConversationHasImageAttachments(conversationId: string): boolean {
-    const messages = this.db.all(
-      `SELECT metadata_json FROM ai_conversation_messages
+    return Boolean(this.db.get(
+      `SELECT 1 AS has_image_attachments FROM ai_conversation_messages
        WHERE conversation_id = ? AND role = 'user'
-       ORDER BY created_at, rowid`,
-      conversationId
-    );
-    return messages.some((message) => {
-      const metadata = json<Record<string, unknown>>(requiredString(message, "metadata_json"), {});
-      return Array.isArray(metadata.chatImageAttachmentIds)
-        && metadata.chatImageAttachmentIds.some((attachmentId) => typeof attachmentId === "string" && attachmentId.trim().length > 0);
-    });
+         AND CASE WHEN json_valid(metadata_json)
+             AND json_type(metadata_json, '$.chatImageAttachmentIds') = 'array'
+           THEN EXISTS (
+             SELECT 1 FROM json_each(metadata_json, '$.chatImageAttachmentIds') attachment
+             WHERE attachment.type = 'text' AND length(trim(attachment.value, ?)) > 0
+           ) ELSE 0 END
+       LIMIT 1`,
+      conversationId,
+      AI_METADATA_TRIM_CHARACTERS
+    ));
   }
 
   getAiConversationInjectedEntities(conversationId: string, workId: string): AiInjectedEntities {
@@ -10970,6 +10981,18 @@ export class Store {
     return title === legacyTitle ? defaultAiConversationTitle(content) : title;
   }
 
+  private aiConversationPreview(source: string): string {
+    let previewSource = source;
+    // 补全被数据库预览截断的场景边界，沿用现有的可见文本解析。
+    if (source.length >= 4096 && source.trimStart().startsWith("<scene_direction>")) {
+      if (!source.includes("</scene_direction>")) previewSource += "</scene_direction>";
+      else if (source.includes("<user_message>") && !source.includes("</user_message>")) previewSource += "</user_message>";
+    }
+    const text = roleplayUserTurnDisplayText(previewSource);
+    const characters = Array.from(text);
+    return characters.length > 200 ? `${characters.slice(0, 199).join("")}…` : text;
+  }
+
   private mapAiConversation(row: Row): Record<string, unknown> {
     const roleplayCharacterId = optionalString(row, "roleplay_character_id");
     const roleplayUserCharacterId = optionalString(row, "roleplay_user_character_id");
@@ -10988,7 +11011,7 @@ export class Store {
       title: this.aiConversationDisplayTitle(conversationId, requiredString(row, "title")),
       isFavorite: booleanValue(row, "is_favorite"),
       messageCount: numberValue(row, "message_count"),
-      preview: roleplayUserTurnDisplayText(requiredString(row, "preview")),
+      preview: this.aiConversationPreview(requiredString(row, "preview")),
       compactedMessageCount: numberValue(row, "compacted_message_count"),
       hasCompactedSummary: Boolean(requiredString(row, "compacted_summary")),
       contextWarningPending: Boolean(optionalString(row, "context_warning_at")),
