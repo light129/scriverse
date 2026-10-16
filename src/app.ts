@@ -2876,7 +2876,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       foreshadowStatus: z.enum(["all", "none", "unresolved", "resolved", "abandoned"]).default("all"),
       sort: z.enum(["tree", "status", "foreshadows", "title"]).default("tree")
     }), request.query);
-    const pagination = parsePagination(request.query) ?? { page: 1, limit: 30, offset: 0 };
+    const pagination = parsePagination(request.query) ?? { page: 1, limit: 20, offset: 0 };
     data(response, store.getChapterOutlineBoard(request.params.workId, {
       query: query.q,
       volumeId: query.volumeId,
@@ -3513,7 +3513,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     const permissions = requestPermissions(request, request.params.workId);
     data(response, mapRecords(store.listTaskSummariesPage(
       request.params.workId,
-      parsePagination(request.query) ?? { page: 1, limit: 30, offset: 0 }
+      parsePagination(request.query) ?? { page: 1, limit: 20, offset: 0 }
     ), (task) => redactTaskCharacterNames(task, permissions)));
   });
   app.post("/api/works/:workId/tasks/context-preview", (request, response) => {
@@ -3696,7 +3696,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   });
   app.get("/api/platform/ai-conversations", (request, response) => {
     const query = parse(adminAiConversationQuerySchema, request.query);
-    const pagination = parsePagination(request.query) ?? { page: 1, limit: 30, offset: 0 };
+    const pagination = parsePagination(request.query) ?? { page: 1, limit: 20, offset: 0 };
     data(response, store.listAdminAiConversationsPage(pagination, {
       query: query.q,
       workId: query.workId,
@@ -3806,7 +3806,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     if (input.autoRunStabilityDelayMinutes !== undefined) ai.rescheduleChapterAnalysisTasks(workId);
     data(response, updated);
   });
-  app.get("/api/works/:workId/ai-conversations", (request, response) => {
+  app.get("/api/works/:workId/ai-conversations", compression(), (request: Request<{ workId: string }>, response) => {
     const pagination = parsePagination({
       page: request.query.page ?? "1",
       limit: request.query.limit ?? "20"
@@ -3842,14 +3842,20 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     assertRequestAiConversationOwner(request, request.params.conversationId);
     next();
   });
-  app.get("/api/ai-conversations/:conversationId", (request, response) => {
-    const pagination = parsePagination(request.query);
+  app.get("/api/ai-conversations/:conversationId", compression(), (request: Request<{ conversationId: string }>, response) => {
+    const view = parse(z.enum(["full", "messages"]), request.query.view ?? "full");
+    const pagination = parsePagination(request.query) ?? (view === "messages" ? { page: 1, limit: 20, offset: 0 } : undefined);
     const focusMessageId = request.query.messageId === undefined
       ? undefined
       : parse(identifier, request.query.messageId);
     const conversation = pagination
       ? store.getAiConversationPage(request.params.conversationId, pagination, focusMessageId)
       : store.getAiConversation(request.params.conversationId);
+    const messagePage = recordValue(conversation.messagesPage);
+    if (view === "messages" && messagePage) {
+      const { items: _items, ...pageInfo } = messagePage;
+      conversation.messagesPage = pageInfo;
+    }
     const permissions = requestPermissions(request, String(conversation.workId));
     data(response, redactAiConversation(conversation, permissions));
   });
