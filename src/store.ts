@@ -123,7 +123,7 @@ function recycleBinExpiresAt(deletedAt: string): string {
   return new Date(new Date(deletedAt).getTime() + RECYCLE_BIN_RETENTION_DAYS * 24 * 60 * 60_000).toISOString();
 }
 
-type ChapterType = "正文" | "设定" | "作者的话" | "其他";
+type ChapterType = "正文" | "番外" | "设定" | "作者的话" | "其他";
 type ChapterAnnotationKind = "note" | "todo";
 type ChapterAnnotationListFilters = {
   chapterId?: string;
@@ -812,6 +812,7 @@ export type StoryIndexChapterPage = {
   latestChaptersByStructure: Array<{
     id: string;
     title: string;
+    chapterType: ChapterType;
     versionNo: number;
     storyOrder: ChapterStoryOrderDetails;
     summary: string;
@@ -819,6 +820,7 @@ export type StoryIndexChapterPage = {
   chapters: Array<{
     id: string;
     title: string;
+    chapterType: ChapterType;
     versionNo: number;
     storyOrder: ChapterStoryOrderDetails;
     summary: string;
@@ -854,6 +856,7 @@ export type ChapterStoryOrderDetails = {
 export type ChapterParagraphMatch = {
   chapterId: string;
   chapterTitle: string;
+  chapterType?: ChapterType;
   paragraph: string;
   paragraphOrder?: number;
   storyOrder?: ChapterStoryOrderDetails;
@@ -944,7 +947,7 @@ function parseRestorableFileSnapshot(value: string, workId: string): { volumes: 
     const chapters = volumeValue.chapters.map((chapterValue) => {
       if (!isRecord(chapterValue) || typeof chapterValue.title !== "string" || typeof chapterValue.content !== "string"
         || typeof chapterValue.sortOrder !== "number" || !Number.isFinite(chapterValue.sortOrder)
-        || !["正文", "设定", "作者的话", "其他"].includes(String(chapterValue.chapterType))) {
+        || !["正文", "番外", "设定", "作者的话", "其他"].includes(String(chapterValue.chapterType))) {
         return invalidFileSnapshot();
       }
       chapterCount += 1;
@@ -2657,7 +2660,7 @@ export class Store {
       workId
     );
     const chapterRows = this.db.all(
-      `SELECT chapter.id, chapter.title, chapter.version_no
+      `SELECT chapter.id, chapter.title, chapter.version_no, chapter.chapter_type
        FROM chapters chapter
        JOIN volumes volume ON volume.id = chapter.volume_id
        WHERE chapter.work_id = ? AND chapter.deleted_at IS NULL AND volume.deleted_at IS NULL${authorNoteFilter}
@@ -2668,7 +2671,7 @@ export class Store {
       offset
     );
     const latestChapterRows = this.db.all(
-      `SELECT chapter.id, chapter.title, chapter.version_no
+      `SELECT chapter.id, chapter.title, chapter.version_no, chapter.chapter_type
        FROM chapters chapter
        JOIN volumes volume ON volume.id = chapter.volume_id
        WHERE chapter.work_id = ? AND chapter.deleted_at IS NULL AND volume.deleted_at IS NULL
@@ -2725,6 +2728,7 @@ export class Store {
           title: requiredString(row, "title"),
           versionNo: numberValue(row, "version_no"),
           storyOrder: storyOrders.get(chapterId) as ChapterStoryOrderDetails,
+          chapterType: requiredString(row, "chapter_type") as ChapterType,
           summary: summaries.get(chapterId) ?? ""
         };
       }),
@@ -2735,6 +2739,7 @@ export class Store {
           title: requiredString(row, "title"),
           versionNo: numberValue(row, "version_no"),
           storyOrder: storyOrders.get(chapterId) as ChapterStoryOrderDetails,
+          chapterType: requiredString(row, "chapter_type") as ChapterType,
           summary: summaries.get(chapterId) ?? ""
         };
       })
@@ -3958,7 +3963,7 @@ export class Store {
     }
     return this.saveChapter(
       chapterId,
-      { title: requiredString(version, "title"), content: requiredString(version, "content") },
+      { title: requiredString(version, "title"), content: requiredString(version, "content"), chapterType: (optionalString(version, "chapter_type") ?? "正文") as ChapterType },
       "restore",
       requiredString(version, "id"),
       `恢复至 v${versionNo}`,
@@ -4864,7 +4869,7 @@ export class Store {
         chapterTitle: requiredString(row, "chapter_title"),
         paragraph: requiredString(row, "content"),
         ...(options.includeParagraphOrder ? { paragraphOrder: numberValue(row, "paragraph_order") } : {}),
-        ...(storyOrder ? { storyOrder } : {})
+        ...(storyOrder ? { storyOrder, chapterType: storyOrder.chapter.type } : {})
       };
     });
   }

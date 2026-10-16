@@ -393,7 +393,9 @@ describe("主动语义检索 API", () => {
     expect(toolExecution).toMatchObject({
       name: "semantic_search_story",
       status: "completed",
-      result: { ok: true, data: { semanticUsed: true, matches: expect.any(Array) } }
+      result: { ok: true, data: { semanticUsed: true, matches: expect.arrayContaining([
+        expect.objectContaining({ type: "chapter", chapterType: "正文" })
+      ]) } }
     });
 
     const embeddingsBeforeOrdinaryChat = Number(runtime.database.get(

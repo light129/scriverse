@@ -119,7 +119,7 @@ const idempotencyKeySchema = z.string().trim().min(16).max(128)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u, "幂等键只能包含英文字母、数字、点、下划线、冒号和短横线");
 const optionalStrings = z.array(z.string()).optional();
 const jsonObject = z.record(z.string(), z.unknown());
-const chapterTypeSchema = z.enum(["正文", "设定", "作者的话", "其他"]);
+const chapterTypeSchema = z.enum(["正文", "番外", "设定", "作者的话", "其他"]);
 const aiConversationTaskTypeSchema = z.enum(aiConversationTaskTypes);
 const roleplayMemoryInputSchema = z.object({
   category: z.enum(ROLEPLAY_MEMORY_CATEGORIES),

@@ -66,12 +66,13 @@ describe("AI 工具结果分页", () => {
 
   it("单个长文本字段按合法字符串片段分页而不截断 JSON", () => {
     const content = "超长正文。".repeat(4_000);
-    const fragments = structuralToolResultRecords([{ chapterId: "chapter-1", title: "第一章", content }]);
+    const fragments = structuralToolResultRecords([{ chapterId: "chapter-1", title: "第一章", chapterType: "番外", content }]);
     const restored = fragments.map((fragment) => String(fragment.content ?? "")).join("");
 
     expect(fragments.length).toBeGreaterThan(1);
     expect(restored).toBe(content);
     expect(fragments.every((fragment) => {
+      expect(fragment.chapterType).toBe("番外");
       expect(() => JSON.parse(JSON.stringify(fragment))).not.toThrow();
       return serializedToolResultChars(fragment) <= 6_000;
     })).toBe(true);

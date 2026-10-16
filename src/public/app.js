@@ -147,7 +147,7 @@ import {
 } from "/outline-board.js?v=20260813-outline-board-page-v1";
 import { backgroundTaskActivityCount, backgroundTaskPollDelay, collectBackgroundTaskTransitions, filterBackgroundTaskTransitionsForAnnouncement } from "/background-task-center.js?v=20260817-analysis-task-expired-toast-v1";
 import { createModuleRequestCache } from "/module-request-cache.js?v=20260730-module-request-cache-v1";
-import { mobileOfflineRuntime } from "/mobile-app-runtime.js?v=20260923-mobile-app-runtime-v6";
+import { mobileOfflineRuntime } from "/mobile-app-runtime.js?v=20261017-chapter-extra-type-v1";
 import { systemStatusPresentation } from "/system-status.js?v=20260801-system-health-v1";
 import { collectS3BackupRunTransitions, s3BackupEncryptionKeyFile, s3BackupEncryptionPresentation, s3BackupFailureToast, s3BackupRootPrefix, s3BackupStatusLabel } from "/s3-backup-ui.js?v=20260810-backup-encryption-v1";
 import { createPresenceClientId, stagePresenceClientIdForRelogin } from "/presence-client-id.js?v=20260810-presence-relogin-v1";
@@ -372,7 +372,7 @@ let topbarStatusSource = "view";
 const taskProgressRefreshInterval = 2_500;
 const taskStatusSnapshots = new Map();
 
-const chapterTypes = ["正文", "设定", "作者的话", "其他"];
+const chapterTypes = ["正文", "番外", "设定", "作者的话", "其他"];
 
 const taskTypeLabels = MODEL_PURPOSE_OPTIONS;
 const analysisTaskTypeLabels = new Map([
@@ -20937,6 +20937,8 @@ async function showVersions() {
     }
     try {
       state.chapter = await api(`/api/chapters/${state.chapter.id}/restore`, { method: "POST", body: { versionNo: Number(button.dataset.restoreVersion) } });
+      mergeChapterDirectoryEntry(state.chapter);
+      syncChapterTreeSelection();
       chapterContentReadyId = state.chapter.id;
       resetChapterDraftLineIds(state.chapter);
       lastSavedChapterSnapshot = { chapterId: state.chapter.id, title: state.chapter.title, content: state.chapter.content };
@@ -23010,9 +23012,12 @@ $("#chapter-type-menu").addEventListener("click", async (event) => {
     const updated = await api(`/api/chapters/${chapterId}`, { method: "PATCH", body: { chapterType } });
     for (const volume of state.work.volumes) {
       const chapter = volume.chapters.find((item) => item.id === chapterId);
-      if (chapter) chapter.chapterType = updated.chapterType;
+      if (chapter) Object.assign(chapter, { chapterType: updated.chapterType, versionNo: updated.versionNo });
     }
-    if (state.chapter?.id === chapterId) state.chapter.chapterType = updated.chapterType;
+    if (state.chapter?.id === chapterId) {
+      Object.assign(state.chapter, { chapterType: updated.chapterType, versionNo: updated.versionNo });
+      updateChapterStats();
+    }
     renderTree();
     toast(`章节类型已标记为“${chapterType}”`);
   } catch (error) {

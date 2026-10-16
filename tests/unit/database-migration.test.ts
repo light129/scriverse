@@ -2673,6 +2673,101 @@ describe("数据库版本化迁移", () => {
     }
   });
 
+  it.each(["normal", "orphan", "invalid", "interrupted"])("迁移 141 保留章节与关联数据并安全处理异常或中断：%s", (scenario) => {
+    const root = mkdtempSync(join(tmpdir(), "chapter-extra-type-migration-"));
+    roots.push(root);
+    const filename = join(root, "novel.db");
+    const current = new Database(filename);
+    const store = new Store(current);
+    const workId = String(store.createWork({ title: "Chapter migration" }).id);
+    const volumeId = String(store.createVolume(workId, { title: "Volume" }).id);
+    const chapterId = String(store.createChapter(workId, { volumeId, title: "Chapter", content: "Original content" }).id);
+    store.saveChapter(chapterId, { content: "Preserved content", chapterType: "其他" });
+    store.createChapterAnnotation(chapterId, { kind: "note", startLine: 1, endLine: 1, note: "Preserved annotation" });
+    const deletedId = String(store.createChapter(workId, { volumeId, title: "Deleted chapter", content: "Recoverable content" }).id);
+    current.run("UPDATE chapters SET deleted_at = ? WHERE id = ?", "2026-10-16T00:00:00.000Z", deletedId);
+    const schemaObjects = current.all<{ sql: string }>(
+      "SELECT sql FROM sqlite_master WHERE tbl_name = 'chapters' AND type IN ('index', 'trigger') AND sql IS NOT NULL ORDER BY type, name"
+    );
+    current.raw.exec("PRAGMA foreign_keys = OFF; PRAGMA legacy_alter_table = ON");
+    current.transaction(() => {
+      current.run(`CREATE TABLE chapters_legacy (
+        id TEXT PRIMARY KEY,
+        work_id TEXT NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+        volume_id TEXT NOT NULL REFERENCES volumes(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL DEFAULT '',
+        chapter_type TEXT NOT NULL DEFAULT '正文' CHECK(chapter_type IN ('正文', '设定', '作者的话', '其他')),
+        sort_order INTEGER NOT NULL,
+        word_count INTEGER NOT NULL DEFAULT 0,
+        version_no INTEGER NOT NULL DEFAULT 1,
+        analysis_status TEXT NOT NULL DEFAULT 'pending',
+        excluded_from_analysis INTEGER NOT NULL DEFAULT 0,
+        deleted_at TEXT,
+        deleted_via_volume_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        line_ids_json TEXT NOT NULL DEFAULT '[]'
+      )`);
+      current.run("INSERT INTO chapters_legacy SELECT * FROM chapters");
+      current.run("DROP TABLE chapters");
+      current.run("ALTER TABLE chapters_legacy RENAME TO chapters");
+      for (const object of schemaObjects) current.raw.exec(object.sql);
+      current.run("DELETE FROM schema_migrations WHERE version = 141");
+    });
+    if (scenario === "orphan") current.run("UPDATE chapters SET volume_id = 'missing-volume' WHERE id = ?", chapterId);
+    if (scenario === "invalid") {
+      current.raw.exec("PRAGMA ignore_check_constraints = ON");
+      current.run("UPDATE chapters SET chapter_type = 'invalid-type' WHERE id = ?", chapterId);
+    }
+    const before = current.all("SELECT * FROM chapters ORDER BY id");
+    const versions = current.all("SELECT * FROM chapter_versions ORDER BY id");
+    const annotations = current.all("SELECT * FROM chapter_annotations ORDER BY id");
+    current.close();
+
+    if (scenario !== "normal") {
+      const originalRun = Database.prototype.run;
+      const spy = scenario === "interrupted" ? vi.spyOn(Database.prototype, "run").mockImplementation(function (this: Database, sql, ...params) {
+        if (sql === "ALTER TABLE chapters_v141 RENAME TO chapters") throw new Error("Simulated migration interruption");
+        return originalRun.call(this, sql, ...params);
+      }) : null;
+      try {
+        expect(() => new Database(filename)).toThrow(
+          scenario === "orphan" ? /数据库外键检查失败/u : scenario === "invalid" ? /CHECK constraint failed/u : /Simulated migration interruption/u
+        );
+      } finally { spy?.mockRestore(); }
+      const check = new DatabaseSync(filename);
+      try {
+        expect(check.prepare("SELECT * FROM chapters ORDER BY id").all()).toEqual(before);
+        expect(check.prepare("SELECT * FROM chapter_versions ORDER BY id").all()).toEqual(versions);
+        expect(check.prepare("SELECT * FROM chapter_annotations ORDER BY id").all()).toEqual(annotations);
+        expect(check.prepare("SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 141").get()).toEqual({ count: 0 });
+        expect(check.prepare("SELECT name FROM sqlite_master WHERE name = 'chapters_v141'").all()).toEqual([]);
+        if (scenario === "orphan") check.prepare("UPDATE chapters SET volume_id = ? WHERE id = ?").run(volumeId, chapterId);
+        if (scenario === "invalid") check.prepare("UPDATE chapters SET chapter_type = '其他' WHERE id = ?").run(chapterId);
+      } finally { check.close(); }
+    }
+
+    for (let pass = 0; pass < 2; pass += 1) {
+      const migrated = new Database(filename);
+      try {
+        expect(migrated.all("SELECT * FROM chapter_versions ORDER BY id")).toEqual(versions);
+        expect(migrated.all("SELECT * FROM chapter_annotations ORDER BY id")).toEqual(annotations);
+        expect(migrated.get("SELECT content, deleted_at FROM chapters WHERE id = ?", deletedId)).toEqual({
+          content: "Recoverable content", deleted_at: "2026-10-16T00:00:00.000Z"
+        });
+        expect(migrated.all("SELECT sql FROM sqlite_master WHERE tbl_name = 'chapters' AND type IN ('index', 'trigger') AND sql IS NOT NULL ORDER BY type, name")).toEqual(schemaObjects);
+        migrated.run("UPDATE chapters SET chapter_type = '番外' WHERE id = ?", chapterId);
+        expect(migrated.get("SELECT content, chapter_type, volume_id, version_no FROM chapters WHERE id = ?", chapterId)).toEqual({
+          content: "Preserved content", chapter_type: "番外", volume_id: volumeId, version_no: 2
+        });
+        expect(migrated.get("PRAGMA foreign_keys")).toEqual({ foreign_keys: 1 });
+        expect(migrated.all("PRAGMA integrity_check")).toEqual([{ integrity_check: "ok" }]);
+        expect(migrated.all("PRAGMA foreign_key_check")).toEqual([]);
+      } finally { migrated.close(); }
+    }
+  });
+
   it("迁移 137 为平台与作品系统提示词增加默认关闭的覆写开关", () => {
     const root = mkdtempSync(join(tmpdir(), "ai-novel-migration-system-prompt-override-"));
     roots.push(root);

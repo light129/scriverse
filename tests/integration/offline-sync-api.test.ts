@@ -284,7 +284,7 @@ describe("Desktop 离线同步快照 API", () => {
           entityId: fixture.chapterId,
           operation: "update",
           baseVersionNo: 1,
-          localSnapshot: { title: "Desktop 第一章", content: "Desktop 离线正文", chapterType: "正文" },
+          localSnapshot: { title: "Desktop 第一章", content: "Desktop 离线正文", chapterType: "番外" },
           changeNote: "Desktop 离线修改"
         },
         {
@@ -311,6 +311,7 @@ describe("Desktop 离线同步快照 API", () => {
     expect((await owner.agent.get(`/api/chapters/${fixture.chapterId}`).expect(200)).body.data).toMatchObject({
       title: "Desktop 第一章",
       content: "Desktop 离线正文",
+      chapterType: "番外",
       versionNo: 2
     });
     expect((await owner.agent.get(`/api/settings/${fixture.settingId}`).expect(200)).body.data).toMatchObject({

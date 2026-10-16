@@ -29,10 +29,10 @@ describe("作者完整创作流程", () => {
         if (prompt.includes("检查下面的续写候选")) {
           content = "[]";
         } else if (prompt.includes("时间线事件证据账本")) {
-          const chapter = prompt.match(/<CHAPTER id="([^"]+)" title="([^"]+)">/u);
+          const chapter = prompt.match(/<CHAPTER id="([^"]+)" title="([^"]+)"[^>]*>/u);
           content = JSON.stringify([{ name: "北港启航", description: "林舟驾驶飞船离开北港。", eventType: "离别", timeLabel: "启航日", timeSort: 1, location: "北港", impactScope: "personal", participantReferences: ["林舟"], evidence: [{ chapterId: chapter?.[1], chapterTitle: chapter?.[2], quote: "逐渐远去的北港" }] }]);
         } else if (prompt.includes("小说人物关系抽取器")) {
-          const chapters = [...prompt.matchAll(/<CHAPTER id="([^"]+)" title="([^"]+)">/gu)];
+          const chapters = [...prompt.matchAll(/<CHAPTER id="([^"]+)" title="([^"]+)"[^>]*>/gu)];
           content = JSON.stringify([{ fromCharacterId: "林舟", toCharacterId: "沈星", category: "social", subtype: "朋友", directed: false, currentStatus: "active", timeRange: { start: "第一卷" }, confidence: 0.82, evidence: chapters.map((match, index) => ({ chapterId: match[1], chapterTitle: match[2], quote: index === 0 ? "林舟想起沈星的警告" : "沈星仍保存着林舟的旧信", contextType: "current", supports: "两人保持长期联系" })) }]);
         }
         if (body.stream === true) {
