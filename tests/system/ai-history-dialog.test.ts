@@ -48,6 +48,7 @@ describe("AI 对话历史弹窗", () => {
     expect(page.text).toContain('id="ai-history-previous"');
     expect(page.text).toContain('id="ai-history-next"');
     expect(page.text).toContain("feature=page-size-20-v1");
+    expect(page.text).toContain("feature=ai-history-message-transport-v1");
     expect(page.text).not.toContain('id="ai-history-panel"');
     expect(application.text).toContain('$("#ai-history-dialog").open');
     expect(application.text).toContain("dialog.showModal()");

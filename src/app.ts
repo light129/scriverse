@@ -3842,14 +3842,20 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     assertRequestAiConversationOwner(request, request.params.conversationId);
     next();
   });
-  app.get("/api/ai-conversations/:conversationId", (request, response) => {
-    const pagination = parsePagination(request.query);
+  app.get("/api/ai-conversations/:conversationId", compression(), (request: Request<{ conversationId: string }>, response) => {
+    const view = parse(z.enum(["full", "messages"]), request.query.view ?? "full");
+    const pagination = parsePagination(request.query) ?? (view === "messages" ? { page: 1, limit: 20, offset: 0 } : undefined);
     const focusMessageId = request.query.messageId === undefined
       ? undefined
       : parse(identifier, request.query.messageId);
     const conversation = pagination
       ? store.getAiConversationPage(request.params.conversationId, pagination, focusMessageId)
       : store.getAiConversation(request.params.conversationId);
+    const messagePage = recordValue(conversation.messagesPage);
+    if (view === "messages" && messagePage) {
+      const { items: _items, ...pageInfo } = messagePage;
+      conversation.messagesPage = pageInfo;
+    }
     const permissions = requestPermissions(request, String(conversation.workId));
     data(response, redactAiConversation(conversation, permissions));
   });

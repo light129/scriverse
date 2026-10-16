@@ -89,7 +89,7 @@ describe("AI 消息分页", () => {
     const { api, tab, feed, loadAiConversationMessagePage } = fixture();
     feed.scrollTop = 300;
     await loadAiConversationMessagePage(tab, 2, true);
-    expect(api).toHaveBeenCalledWith("/api/ai-conversations/conversation?page=2&limit=20");
+    expect(api).toHaveBeenCalledWith("/api/ai-conversations/conversation?page=2&limit=20&view=messages");
     expect(feed.querySelectorAll("[data-message-id]").map((element) => element.dataset.messageId)).toEqual(messages(6, 45).map((message) => message.id));
     expect(feed.scrollTop).toBe(2_300);
     expect(tab.composer.text).toBe("未发送的输入");

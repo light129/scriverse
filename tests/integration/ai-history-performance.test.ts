@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "../../src/app.js";
 import { createTestRuntime } from "../helpers.js";
 
-describe("超长 AI 历史列表", () => {
+describe("超长 AI 历史读取", () => {
   let runtime: Runtime | null = null;
   let sequence = 0;
 
@@ -102,5 +102,30 @@ describe("超长 AI 历史列表", () => {
     expect(response.headers["content-encoding"]).toBe("gzip");
     expect(response.body.data.items).toHaveLength(20);
     expect(response.body.data.items[0].preview.length).toBe(200);
+  });
+
+  it("消息视图只传输一次完整消息，默认分页且保留旧响应兼容", async () => {
+    const { runtime, workId } = fixture();
+    const conversation = runtime.store.createAiConversation(workId);
+    const conversationId = String(conversation.id);
+    const content = "完整历史正文不得截断。".repeat(2_000);
+    for (let index = 0; index < 30; index += 1) insertMessage(conversationId, index % 2 ? "assistant" : "user", `${content}${index}`, "{}");
+    const lean = await request(runtime.app).get(`/api/ai-conversations/${conversationId}?view=messages`).set("Accept-Encoding", "gzip").expect(200);
+    expect(lean.headers["content-encoding"]).toBe("gzip");
+    expect(lean.body.data.messagesPage).toEqual({ page: 1, limit: 20, hasMore: true, nextPage: 2 });
+    expect(lean.body.data.messages).toHaveLength(20);
+    expect(lean.body.data.messages[0].content).toBe(`${content}10`);
+    const legacy = await request(runtime.app).get(`/api/ai-conversations/${conversationId}?page=1&limit=20`).expect(200);
+    expect(legacy.body.data.messagesPage.items).toEqual(lean.body.data.messages);
+    const focused = await request(runtime.app).get(`/api/ai-conversations/${conversationId}?view=messages&limit=1&messageId=history-performance-1`).expect(200);
+    expect(focused.body.data.messages).toHaveLength(1);
+    expect(focused.body.data.messages[0].content).toBe(`${content}0`);
+  });
+
+  it("拒绝无效或重复的消息视图参数", async () => {
+    const { runtime, workId } = fixture();
+    const conversation = runtime.store.createAiConversation(workId);
+    await request(runtime.app).get(`/api/ai-conversations/${String(conversation.id)}?view=unknown`).expect(400);
+    await request(runtime.app).get(`/api/ai-conversations/${String(conversation.id)}?view=messages&view=full`).expect(400);
   });
 });

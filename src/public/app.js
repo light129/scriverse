@@ -4490,7 +4490,7 @@ async function reloadAiQuestionConversation(conversationId) {
   if (!conversationId) return null;
   const tab = aiChatTabManager.findByConversation(conversationId);
   if (!tab) return openAiConversation(conversationId);
-  const conversation = await api(`/api/ai-conversations/${encodeURIComponent(conversationId)}?page=1&limit=${aiConversationMessagePageLimit}`);
+  const conversation = await api(`/api/ai-conversations/${encodeURIComponent(conversationId)}?page=1&limit=${aiConversationMessagePageLimit}&view=messages`);
   if (String(conversation.workId ?? "") !== String(state.work?.id ?? "")) throw new Error("AI 对话不属于当前作品");
   upsertAiConversationSummary(conversation);
   applyConversationToAiChatTab(tab, conversation);
@@ -5284,7 +5284,7 @@ async function openAiConversation(conversationId, hideHistory = true, focusMessa
   }
   const navigation = beginAiConversationNavigation("已切换 AI 对话", "切换会话");
   try {
-    const parameters = new URLSearchParams({ page: "1", limit: String(aiConversationMessagePageLimit) });
+    const parameters = new URLSearchParams({ page: "1", limit: String(aiConversationMessagePageLimit), view: "messages" });
     if (focusMessageId) parameters.set("messageId", String(focusMessageId));
     if (roleplayMemorySourceId) parameters.set("roleplayMemorySourceId", String(roleplayMemorySourceId));
     const [conversation] = await Promise.all([
@@ -5370,7 +5370,7 @@ async function loadAiConversationMessagePage(tab, page, prepend = false) {
   tab.messagePageLoading = true;
   renderAiConversationMessagePagination(tab);
   try {
-    const conversation = await api(`/api/ai-conversations/${encodeURIComponent(conversationId)}?page=${page}&limit=${aiConversationMessagePageLimit}`);
+    const conversation = await api(`/api/ai-conversations/${encodeURIComponent(conversationId)}?page=${page}&limit=${aiConversationMessagePageLimit}&view=messages`);
     if (aiChatTabManager.get(tab.id) !== tab || tab.conversationId !== conversationId
       || tab.messageHistoryGeneration !== generation || tab.workId !== state.work?.id
       || aiRequestManager.hasActive(tab.id)) return;

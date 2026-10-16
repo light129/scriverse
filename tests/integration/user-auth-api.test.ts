@@ -3381,6 +3381,7 @@ describe("用户、作品权限与操作者追踪 API", () => {
     });
 
     const ownerView = await owner.agent.get(`/api/ai-conversations/${conversationId}`).expect(403);
+    await owner.agent.get(`/api/ai-conversations/${conversationId}?page=1&limit=20&view=messages`).expect(403);
     expect(ownerView.body.error.code).toBe("AI_CONVERSATION_ACCESS_DENIED");
 
     const collaboratorView = await collaborator.agent.get(`/api/ai-conversations/${conversationId}`).expect(200);
@@ -3400,6 +3401,9 @@ describe("用户、作品权限与操作者追踪 API", () => {
       mentionChapterIds: ["readable-chapter-id"],
       modelDisplayName: "保留的模型信息"
     });
+    const leanView = await collaborator.agent.get(`/api/ai-conversations/${conversationId}?page=1&limit=20&view=messages`).expect(200);
+    expect(leanView.body.data.messages).toEqual(pagedView.body.data.messages);
+    expect(leanView.body.data.messagesPage).not.toHaveProperty("items");
   });
 
   it("AI 建议与对话按成员正文权限脱敏", async () => {
