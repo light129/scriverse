@@ -3946,7 +3946,7 @@ export class Store {
     }
     return this.saveChapter(
       chapterId,
-      { title: requiredString(version, "title"), content: requiredString(version, "content") },
+      { title: requiredString(version, "title"), content: requiredString(version, "content"), chapterType: (optionalString(version, "chapter_type") ?? "正文") as ChapterType },
       "restore",
       requiredString(version, "id"),
       `恢复至 v${versionNo}`,
