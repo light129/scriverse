@@ -5,7 +5,7 @@ describe("pagination", () => {
   it("uses bounded defaults when pagination is requested", () => {
     expect(parsePagination({ limit: "2" })).toEqual({ page: 1, limit: 2, offset: 0 });
     expect(parsePagination({ page: "3", limit: "2" })).toEqual({ page: 3, limit: 2, offset: 4 });
-    expect(parsePagination({ page: "3" })).toEqual({ page: 3, limit: 30, offset: 60 });
+    expect(parsePagination({ page: "3" })).toEqual({ page: 3, limit: 20, offset: 40 });
   });
 
   it("returns the next page only when an extra row exists", () => {

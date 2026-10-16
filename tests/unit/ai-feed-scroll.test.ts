@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-// @ts-expect-error 浏览器滚动策略纯函数不提供独立类型声明。
 import { shouldFollowAiFeedAfterScroll } from "../../src/public/ai-feed-scroll.js";
 
 describe("AI feed scroll intent", () => {

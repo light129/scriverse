@@ -53,6 +53,7 @@ describe("作品工作台按需加载", () => {
     expect(refreshSource).not.toContain("state.collapsedVolumeIds = new Set(state.work.volumes.map((volume) => volume.id));");
     expect(chapterLoadingSource).toContain("volumeChapterRequests.get(volumeId) === request");
     expect(chapterLoadingSource).toContain("const generation = workScopedUiGeneration;");
+    expect(chapterLoadingSource).toContain('await apiAllPages(`/api/volumes/${encodeURIComponent(volumeId)}/chapters`)');
   });
 
   it("子模块和创作助手资源只在首次使用时加载", async () => {

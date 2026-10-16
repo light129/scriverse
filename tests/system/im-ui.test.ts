@@ -76,6 +76,7 @@ describe("全局 IM 工作区界面", () => {
     expect(page.text).toContain("feature=im-icon-button-size-v1");
     expect(page.text).toContain("feature=im-sidebar-compact-v1");
     expect(application.text).toContain('/im.js?v=20260904-im-judge-outcomes-v106');
+    expect(application.text).toContain('/im.js?v=20260904-im-judge-outcomes-v106&feature=page-size-20-v1');
     expect(application.text).toContain('onRouteChange: () => replacePageRoute({ view: "im" })');
     expect(application.text).toMatch(/function replacePageRoute\(route, options = \{\}\) \{[\s\S]*?schedulePresenceHeartbeat\(\);/);
     expect(application.text).toContain('confirmDiscardChanges("当前章节有未保存修改，进入 IM 将放弃本地修改。是否继续？")');

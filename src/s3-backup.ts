@@ -630,7 +630,7 @@ export class S3BackupManager {
   }
 
   listRuns(options: { afterSequence?: number; limit?: number } = {}): { items: S3BackupRun[]; latestSequence: number } {
-    const limit = Math.min(100, Math.max(1, options.limit ?? 30));
+    const limit = Math.min(100, Math.max(1, options.limit ?? 20));
     const rows = options.afterSequence === undefined
       ? this.database.all("SELECT rowid AS sequence, * FROM s3_backup_runs ORDER BY rowid DESC LIMIT ?", limit)
       : this.database.all(

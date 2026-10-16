@@ -47,12 +47,17 @@ describe("AI 对话历史弹窗", () => {
     expect(page.text).toContain('feature=ai-writing-skills-v3');
     expect(page.text).toContain('id="ai-history-previous"');
     expect(page.text).toContain('id="ai-history-next"');
+    expect(page.text).toContain("feature=page-size-20-v1");
+    expect(page.text).toContain("feature=ai-history-message-transport-v1");
+    expect(page.text).toContain("feature=ai-history-render-v2");
     expect(page.text).not.toContain('id="ai-history-panel"');
     expect(application.text).toContain('$("#ai-history-dialog").open');
     expect(application.text).toContain("dialog.showModal()");
     expect(application.text).toContain('$("#ai-history-close").addEventListener');
     expect(application.text).toContain('$("#ai-history-previous").addEventListener');
     expect(application.text).toContain('$("#ai-history-next").addEventListener');
+    expect(application.text).toContain("const aiConversationMessagePageLimit = 20;");
+    expect(application.text).toContain('earlier.textContent = tab.messagePageLoading ? "正在加载……" : "加载更早消息";');
     expect(application.text).toContain('more.setAttribute("aria-haspopup", "menu")');
     expect(application.text).toContain("function aiConversationTaskTypeLabel(taskType)");
     expect(application.text).toContain("function aiConversationContextScopeLabel(scope)");

@@ -409,7 +409,7 @@ export function createImWorkspace({ api, esc, renderMarkdown, toast, confirmToas
   async function refreshConversations() {
     const request = ++conversationListRequest;
     const unreadGeneration = ++unreadRequest;
-    const page = await api("/api/im/conversations?limit=50");
+    const page = await api("/api/im/conversations?limit=20");
     if (request !== conversationListRequest) return;
     conversations = array(page.items ?? page);
     if (current && !conversations.some((conversation) => conversation.id === current.id)) conversations.push(current);
@@ -427,7 +427,7 @@ export function createImWorkspace({ api, esc, renderMarkdown, toast, confirmToas
     const unreadGeneration = ++unreadRequest;
     const cursor = conversationNextCursor;
     try {
-      const page = await api(`/api/im/conversations?limit=50&cursor=${encodeURIComponent(cursor)}`);
+      const page = await api(`/api/im/conversations?limit=20&cursor=${encodeURIComponent(cursor)}`);
       if (cursor !== conversationNextCursor) return;
       const known = new Set(conversations.map((conversation) => conversation.id));
       conversations.push(...array(page.items).filter((conversation) => !known.has(conversation.id)));
