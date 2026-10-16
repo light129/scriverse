@@ -145,6 +145,7 @@ describe("历史正文可见范围渲染", () => {
     test.body.height = 800;
     test.body.onContentChange = () => { test.feed.scrollTop += 17; };
     test.scrollStates.set(test.feed, false);
+    test.scrollTops.set(test.feed, test.feed.scrollTop);
     test.observeAiHistoryMessage(test.message, { feed: test.feed }, test.text, [], "assistant", true);
     test.observers[0]!.emit([{ target: test.message, isIntersecting: true }]);
     test.flush();
