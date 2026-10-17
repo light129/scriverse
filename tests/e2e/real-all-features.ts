@@ -44,7 +44,7 @@ const mockAi = createServer(async (incoming: IncomingMessage, outgoing: ServerRe
     if (prompt.includes("检查下面的续写候选")) {
       content = "[]";
     } else if (prompt.includes("小说人物关系抽取器")) {
-      const chapter = prompt.match(/<CHAPTER id="([^"]+)" title="([^"]+)">/u);
+      const chapter = prompt.match(/<CHAPTER id="([^"]+)" title="([^"]+)"[^>]*>/u);
       content = JSON.stringify([{
         fromCharacterId: "林舟",
         toCharacterId: "沈星",

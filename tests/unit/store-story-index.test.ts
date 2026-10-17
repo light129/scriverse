@@ -46,6 +46,7 @@ describe("story_index 目录读取", () => {
         {
           id: chapters[3]?.id,
           title: "第四章",
+          chapterType: "正文",
           versionNo: 1,
           storyOrder: {
             volume: { volumeId: secondVolume.id, volumeTitle: "第二卷", directoryOrder: 1, storyOrder: 1 },
@@ -58,6 +59,7 @@ describe("story_index 目录读取", () => {
         {
           id: chapters[1]?.id,
           title: "第二章",
+          chapterType: "正文",
           versionNo: 1,
           summary: "第 2 章摘要",
           storyOrder: {
@@ -68,6 +70,7 @@ describe("story_index 目录读取", () => {
         {
           id: chapters[2]?.id,
           title: "第三章",
+          chapterType: "正文",
           versionNo: 1,
           summary: "第 3 章摘要",
           storyOrder: {

@@ -1072,6 +1072,7 @@ type RelationshipIndexedSource = {
   sourceType: "chapter" | string;
   sourceId: string;
   title: string;
+  chapterType?: string;
   content: string;
   version: string;
 };
@@ -1726,7 +1727,7 @@ const AGENT_TOOL_DEFINITIONS: Record<AgentToolId, Record<string, unknown>> = {
     type: "function",
     function: {
       name: "story_index",
-      description: "读取当前作品的基本信息，并按分卷剧情顺序分页列出卷章、章节概要和完整顺序元数据。latestChaptersByStructure 始终独立返回结构上最新的正文章节，不受当前章节分页影响；nextChapterOffset 非空时表示还有后续章节页。有时间线读取权限时还返回已确认且可排序的关联事件。回答作品简介、最新剧情、情节先后、整体结构或定位章节时优先使用；不会返回正文。",
+      description: "读取当前作品的基本信息，并按分卷剧情顺序分页列出卷章、章节概要和完整顺序元数据。latestChaptersByStructure 始终独立返回结构上最新的正文章节，不受当前章节分页影响；nextChapterOffset 非空时表示还有后续章节页。有时间线读取权限时还返回已确认且可排序的关联事件。回答作品简介、最新剧情、情节先后、整体结构或定位章节时优先使用；不会返回正文。每条章节记录都包含 chapterType（作者标记的章节类型，含番外）。",
       parameters: {
         type: "object",
         properties: {
@@ -1748,7 +1749,7 @@ const AGENT_TOOL_DEFINITIONS: Record<AgentToolId, Record<string, unknown>> = {
     type: "function",
     function: {
       name: "read_chapters",
-      description: "读取指定章节的当前正文、章节概要和完整剧情顺序元数据。仅在需要原文证据或精确措辞时使用；每次最多 3 章。",
+      description: "读取指定章节的当前正文、章节概要和完整剧情顺序元数据。每条章节记录都包含 chapterType（作者标记的章节类型，含番外）。仅在需要原文证据或精确措辞时使用；每次最多 3 章。",
       parameters: { type: "object", properties: { chapterIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 3 }, include: { type: "string", enum: ["summary", "content", "both"] }, cursor: agentToolCursorParameter }, required: ["chapterIds"], additionalProperties: false }
     }
   },
@@ -1756,7 +1757,7 @@ const AGENT_TOOL_DEFINITIONS: Record<AgentToolId, Record<string, unknown>> = {
     type: "function",
     function: {
       name: "grep",
-      description: "在当前作品的章节正文索引中查询关键字，返回最新结构位置优先的完整段落、章节标题、ID 和完整剧情顺序元数据。latestOccurrences.byStructure 独立给出结构顺序最后出现位置；有时间线权限时，latestOccurrences.byTimelineTrack 还会按每条已确认轨道（trackId=null 表示未分轨）给出最大 timeSort 对应的最后出现时间，可用于识别倒叙事件。默认返回 20 条证据，可按需调整 limit。",
+      description: "在当前作品的章节正文索引中查询关键字，返回最新结构位置优先的完整段落、章节标题、ID 和完整剧情顺序元数据。章节信息包含 chapterType（作者标记的章节类型，含番外）。latestOccurrences.byStructure 独立给出结构顺序最后出现位置；有时间线权限时，latestOccurrences.byTimelineTrack 还会按每条已确认轨道（trackId=null 表示未分轨）给出最大 timeSort 对应的最后出现时间，可用于识别倒叙事件。默认返回 20 条证据，可按需调整 limit。",
       parameters: { type: "object", properties: { keyword: { type: "string", minLength: 1, maxLength: 200 }, limit: { type: "integer", minimum: 1, maximum: 100, default: 20 }, cursor: agentToolCursorParameter }, required: ["keyword"], additionalProperties: false }
     }
   },
@@ -1772,7 +1773,7 @@ const AGENT_TOOL_DEFINITIONS: Record<AgentToolId, Record<string, unknown>> = {
     type: "function",
     function: {
       name: "semantic_search_story",
-      description: "只读语义检索当前作品原文。仅在需要用自然语言整句查找正文、设定、人物 Markdown 档案、种族、组织、时间线、关系、大纲或伏笔时显式调用；返回来源 ID、来源版本、档案章节 ID、原文行号、semantic 匹配标记与相关性。不会修改任何作品内容、索引来源实体或会话固定上下文；索引未就绪或通道失败时会明确返回降级状态与关键词结果。不要把 semantic 结果伪装成关键词命中。",
+      description: "只读语义检索当前作品原文。仅在需要用自然语言整句查找正文、设定、人物 Markdown 档案、种族、组织、时间线、关系、大纲或伏笔时显式调用；返回来源 ID、来源版本、档案章节 ID、原文行号、semantic 匹配标记与相关性。正文章节结果包含 chapterType（作者标记的章节类型，含番外）。不会修改任何作品内容、索引来源实体或会话固定上下文；索引未就绪或通道失败时会明确返回降级状态与关键词结果。不要把 semantic 结果伪装成关键词命中。",
       parameters: {
         type: "object",
         properties: {
@@ -1846,7 +1847,7 @@ const AGENT_TOOL_DEFINITIONS: Record<AgentToolId, Record<string, unknown>> = {
     type: "function",
     function: {
       name: "recall_story",
-      description: "查询当前作品已保存正文中的关键词，但只返回当前扮演角色姓名或别名出现过的段落，避免全知正文。返回最新结构位置优先的完整段落、章节标题、ID 和完整剧情顺序元数据。latestOccurrences.byStructure 独立给出结构顺序最后出现位置；有时间线权限时，latestOccurrences.byTimelineTrack 还会按每条已确认轨道（trackId=null 表示未分轨）给出最大 timeSort 对应的最后出现时间，可用于回忆倒叙事件。只能读取当前正文，不会读取设定库或作者想法。",
+      description: "查询当前作品已保存正文中的关键词，但只返回当前扮演角色姓名或别名出现过的段落，避免全知正文。返回最新结构位置优先的完整段落、章节标题、ID 和完整剧情顺序元数据。章节信息包含 chapterType（作者标记的章节类型，含番外）。latestOccurrences.byStructure 独立给出结构顺序最后出现位置；有时间线权限时，latestOccurrences.byTimelineTrack 还会按每条已确认轨道（trackId=null 表示未分轨）给出最大 timeSort 对应的最后出现时间，可用于回忆倒叙事件。只能读取当前正文，不会读取设定库或作者想法。",
       parameters: { type: "object", properties: { keyword: { type: "string", minLength: 1, maxLength: 200 }, limit: { type: "integer", minimum: 1, maximum: 100, default: 20 }, cursor: agentToolCursorParameter }, required: ["keyword"], additionalProperties: false }
     }
   },
@@ -2951,7 +2952,7 @@ export class ContextBuilder {
         for (const chapter of chapters) {
           contentSections.push(wrapAiContextRegion(
             "chapter",
-            `[${String(volume.title)} / ${String(chapter.title)} | 版本 ${String(chapter.versionNo)}]\n${String(chapter.content)}`
+            `[${String(volume.title)} / ${String(chapter.title)} | 版本 ${String(chapter.versionNo)} | 章节类型 ${String(chapter.chapterType ?? "正文")}]\n${String(chapter.content)}`
           ));
         }
       }
@@ -2963,7 +2964,7 @@ export class ContextBuilder {
         for (const chapter of (volume.chapters as Record<string, unknown>[]).filter((item) => !isAuthorNoteChapter(item))) {
           contentSections.push(wrapAiContextRegion(
             "chapter",
-            `[# ${String(volume.title)} / ${String(chapter.title)} | 版本 ${String(chapter.versionNo)}]\n${String(chapter.content)}`
+            `[# ${String(volume.title)} / ${String(chapter.title)} | 版本 ${String(chapter.versionNo)} | 章节类型 ${String(chapter.chapterType ?? "正文")}]\n${String(chapter.content)}`
           ));
         }
       }
@@ -3111,7 +3112,7 @@ export class ContextBuilder {
         contentSections.push(wrapAiContextRegion(
           "referenced_chapters",
           `作者主动引用的章节：\n${eligibleChapters
-            .map((chapter) => `[${String(chapter.title)} | 版本 ${String(chapter.versionNo)}]\n${String(chapter.content)}`)
+            .map((chapter) => `[${String(chapter.title)} | 版本 ${String(chapter.versionNo)} | 章节类型 ${String(chapter.chapterType ?? "正文")}]\n${String(chapter.content)}`)
             .join("\n\n")}`
         ));
       }
@@ -3221,8 +3222,8 @@ export class ContextBuilder {
     sections.push(wrapAiContextRegion(
       "chapter",
       includeContent
-        ? `当前章节：${String(chapter.title)} | 版本 ${String(chapter.versionNo)}\n${String(chapter.content)}`
-        : `所在章节：${String(chapter.title)} | 版本 ${String(chapter.versionNo)}`
+        ? `当前章节：${String(chapter.title)} | 版本 ${String(chapter.versionNo)} | 章节类型 ${String(chapter.chapterType ?? "正文")}\n${String(chapter.content)}`
+        : `所在章节：${String(chapter.title)} | 版本 ${String(chapter.versionNo)} | 章节类型 ${String(chapter.chapterType ?? "正文")}`
     ));
   }
 
@@ -3237,10 +3238,10 @@ export class ContextBuilder {
       const chapters = (volume.chapters as Record<string, unknown>[]).filter((chapter) => !isAuthorNoteChapter(chapter));
       const ranked = chapters.map((chapter, order) => {
         const summary = summaryByChapterId.get(String(chapter.id)) ?? "";
-        const line = `- ${String(chapter.title)}：${summary || "尚无章节概要"}`;
+        const line = `- ${String(chapter.title)}：${summary || "尚无章节概要"} | 章节类型 ${String(chapter.chapterType ?? "正文")}`;
         return { line, order, relevance: contextRelevance(query, `${String(chapter.title)}\n${summary}`) };
       }).sort((left, right) => right.relevance - left.relevance || left.order - right.order);
-      const header = `# ${String(volume.title)}\n全书章节概要（分卷覆盖，不含正文）：`;
+      const header = `# ${String(volume.title)}\n全书章节概要${perVolumeBudget < 160 ? "" : "（分卷覆盖，不含正文）"}：`;
       const chosen = [header];
       for (const item of ranked) {
         const candidate = [...chosen, item.line].join("\n");
@@ -3274,7 +3275,7 @@ export class ContextBuilder {
     const content = String(previous.content);
     sections.push(wrapAiContextRegion(
       "previous_chapter_tail",
-      `上一章节结尾：${String(previous.title)} | 版本 ${String(previous.versionNo)}\n${content.slice(-5000)}`
+      `上一章节结尾：${String(previous.title)} | 版本 ${String(previous.versionNo)} | 章节类型 ${String(previous.chapterType ?? "正文")}\n${content.slice(-5000)}`
     ));
   }
 
@@ -3995,6 +3996,7 @@ export class AiManager {
   private hybridAiSearchDetails(workId: string, sourceType: string, sourceId: string): Record<string, unknown> {
     const source = this.relationshipIndexedSource(workId, sourceType, sourceId);
     if (!source) return {};
+    if (sourceType === "chapter") return { chapterType: source.chapterType };
     let details: Record<string, unknown> = {};
     try {
       const parsed = JSON.parse(source.content) as unknown;
@@ -4048,7 +4050,7 @@ export class AiManager {
           chapterIds,
           chapterStoryOrders: chapterIds.flatMap((chapterId) => {
             const storyOrder = chapterStoryOrders.get(chapterId);
-            return storyOrder ? [{ chapterId, storyOrder }] : [];
+            return storyOrder ? [{ chapterId, chapterType: storyOrder.chapter.type, storyOrder }] : [];
           }),
           orderEligible: event.status === "confirmed" && timeSort !== null,
           status: event.status
@@ -9453,7 +9455,7 @@ export class AiManager {
           const chapterStoryOrders = (Array.isArray(event.chapterIds) ? event.chapterIds : []).flatMap((chapterId) => {
             if (typeof chapterId !== "string") return [];
             const storyOrder = linkedChapterStoryOrders.get(chapterId);
-            return storyOrder ? [{ chapterId, storyOrder }] : [];
+            return storyOrder ? [{ chapterId, chapterType: storyOrder.chapter.type, storyOrder }] : [];
           });
           const record = { category: "timeline", ...event, chapterStoryOrders };
           if (matchesQuery(record)) memoryRecords.push(record);
@@ -9604,6 +9606,7 @@ export class AiManager {
           return {
             chapterId,
             title: chapter.title,
+            chapterType: chapter.chapterType,
             versionNo: chapter.versionNo,
             storyOrder: storyOrders.get(chapterId),
             ...(include !== "content" ? { summary: summaries.get(chapterId) ?? "" } : {}),
@@ -13854,6 +13857,9 @@ export class AiManager {
         includePhonetic: false,
         conversationOwnerUserId: options.conversationOwnerUserId
       }) as SearchChannelResult[];
+    for (const result of keywordResults) {
+      if (result.type === "chapter") Object.assign(result, this.hybridAiSearchDetails(workId, result.type, result.id));
+    }
     const fallback = (status: string, reason: string, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
       query: normalizedQuery,
       status,
@@ -14435,6 +14441,7 @@ export class AiManager {
           sourceId,
           title: String(chapter.title),
           content: String(chapter.content),
+          chapterType: String(chapter.chapterType),
           version: String(chapter.versionNo)
         };
       } catch {
@@ -16399,7 +16406,7 @@ export class AiManager {
       chapterIds = [];
     };
     for (const chapter of chapters) {
-      const header = `\n<CHAPTER id="${String(chapter.id)}" title="${String(chapter.title).replaceAll('"', "'")}">\n`;
+      const header = `\n<CHAPTER id="${String(chapter.id)}" title="${String(chapter.title).replaceAll('"', "'")}" chapterType="${String(chapter.chapterType ?? "正文")}">\n`;
       const footer = "\n</CHAPTER>\n";
       const content = String(chapter.content);
       const block = `${header}${content}${footer}`;
@@ -16435,7 +16442,7 @@ export class AiManager {
     for (const chapter of chapters) {
       const chapterId = String(chapter.id);
       const title = String(chapter.title).replaceAll('"', "'");
-      const header = `\n<CHAPTER id="${chapterId}" title="${title}">\n`;
+      const header = `\n<CHAPTER id="${chapterId}" title="${title}" chapterType="${String(chapter.chapterType ?? "正文")}">\n`;
       const footer = "\n</CHAPTER>\n";
       const content = String(chapter.content);
       const block = `${header}${content}${footer}`;

@@ -264,7 +264,7 @@ describe("分析任务自动运行", () => {
     expect(summaries.body.data.items[0]).not.toHaveProperty("sourceVersions");
     expect(summaries.body.data.items[0]).not.toHaveProperty("failures");
     const defaultSummaryPage = await request(runtime.app).get(`/api/works/${workId}/tasks?view=summary`).expect(200);
-    expect(defaultSummaryPage.body.data).toMatchObject({ page: 1, limit: 30, total: tasks.body.data.total });
+    expect(defaultSummaryPage.body.data).toMatchObject({ page: 1, limit: 20, total: tasks.body.data.total });
     expect(defaultSummaryPage.body.data.items).toHaveLength(tasks.body.data.total);
     const detail = await request(runtime.app).get(`/api/tasks/${summaries.body.data.items[0].id}`).expect(200);
     expect(detail.body.data).toEqual(expect.objectContaining({
@@ -288,13 +288,13 @@ describe("分析任务自动运行", () => {
     const firstPage = await request(runtime.app).get(`/api/works/${workId}/tasks`).expect(200);
     expect(firstPage.body.data).toMatchObject({
       page: 1,
-      limit: 30,
+      limit: 20,
       total: 55,
       hasMore: true,
       nextPage: 2,
       stats: { total: 55, pendingCount: 55, runningCount: 0, runningProgress: 0 }
     });
-    expect(firstPage.body.data.items).toHaveLength(30);
+    expect(firstPage.body.data.items).toHaveLength(20);
     expect(JSON.stringify(firstPage.body.data)).not.toContain("不可出现在摘要中的提示");
     expect(firstPage.body.data.items[0]).not.toHaveProperty("scope");
     expect(firstPage.body.data.items[0]).not.toHaveProperty("result");
@@ -303,8 +303,14 @@ describe("分析任务自动运行", () => {
     expect(firstPage.body.data.items[0]).not.toHaveProperty("failures");
 
     const secondPage = await request(runtime.app).get(`/api/works/${workId}/tasks?page=2`).expect(200);
-    expect(secondPage.body.data).toMatchObject({ page: 2, limit: 30, total: 55, hasMore: false, nextPage: null });
-    expect(secondPage.body.data.items).toHaveLength(25);
+    expect(secondPage.body.data).toMatchObject({ page: 2, limit: 20, total: 55, hasMore: true, nextPage: 3 });
+    expect(secondPage.body.data.items).toHaveLength(20);
+    const thirdPage = await request(runtime.app).get(`/api/works/${workId}/tasks?page=3`).expect(200);
+    expect(thirdPage.body.data).toMatchObject({ page: 3, limit: 20, total: 55, hasMore: false, nextPage: null });
+    expect(thirdPage.body.data.items).toHaveLength(15);
+    const ids = [...firstPage.body.data.items, ...secondPage.body.data.items, ...thirdPage.body.data.items]
+      .map((item: { id: string }) => item.id);
+    expect(new Set(ids).size).toBe(55);
   });
 
   it("正文持续编辑时重置稳定等待，并在停止编辑后才创建章节理解任务", async () => {
