@@ -48,7 +48,7 @@ describe("AI 上下文用量提示", () => {
       maxOutputTokens: 500,
       outputTokens: 200
     })).toBe("");
-    expect(formatAiContextModelIdLine({ providerModelId: " claude-sonnet-4-6 " })).toBe("模型 id claude-sonnet-4-6");
+    expect(formatAiContextModelIdLine({ providerModelId: " claude-sonnet-4-6 " })).toBe("模型：claude-sonnet-4-6");
     expect(formatAiContextUsageTooltip({
       inputTokens: 700,
       contextWindow: 1_000,

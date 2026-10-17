@@ -22,7 +22,7 @@ export function formatAiContextPopoverDescription(usage) {
 
 export function formatAiContextModelIdLine(usage) {
   const modelId = typeof usage?.providerModelId === "string" ? usage.providerModelId.trim() : "";
-  return modelId ? `模型 id ${modelId}` : "";
+  return modelId ? `模型：${modelId}` : "";
 }
 
 export function formatAiContextUsageTooltip(usage) {

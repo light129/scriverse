@@ -73,9 +73,9 @@ describe("AI 对话上下文 compact 界面", () => {
     expect(application).toContain("formatAiContextPopoverDescription");
     expect(application).toContain("formatAiContextPopoverDescription(usage)");
     expect(application).toContain("attachAiContextCacheHitPercent(payload.contextUsage, payload.cacheHitPercent)");
-    expect(application).toContain('/ai-context-meter.js?v=20261017-context-model-id-v1');
+    expect(application).toContain('/ai-context-meter.js?v=20261017-context-model-id-v2');
     expect(application).toContain("formatAiContextModelIdLine(usage)");
-    expect(page).toContain("&feature=ai-context-model-id-v1");
+    expect(page).toContain("&feature=ai-context-model-id-v2");
     expect(styles).toContain(".ai-context-model-id { display: block; overflow-wrap: anywhere; }");
     expect(page).toContain("&feature=ai-context-cache-hit-v1");
     expect(application).toContain("setAiContextDistributionVisible");
