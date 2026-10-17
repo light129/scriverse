@@ -60,7 +60,7 @@ import { createStreamTypewriter, createStreamTypewriterSpeedController } from "/
 import { assertAiStreamCompleted, readAiEventStream } from "/ai-stream-protocol.js?v=20260812-ai-stream-complete-v1";
 import { buildUsageCalendar, formatCacheHitRate, formatEstimatedCost, formatTokenCount, usageCalendarYears } from "/ai-usage.js?v=20260830-ai-usage-year-v1";
 import { formatAiMessageTime } from "/ai-message-time.js?v=20260801-month-day-time";
-import { attachAiContextCacheHitPercent, formatAiContextPopoverDescription, formatAiContextUsageTooltip, mergeAiContextUsage, normalizeAiContextTokenDistribution, resolveAiContextUsage } from "/ai-context-meter.js?v=20260911-context-cache-hit-v1";
+import { attachAiContextCacheHitPercent, formatAiContextModelIdLine, formatAiContextPopoverDescription, formatAiContextUsageTooltip, mergeAiContextUsage, normalizeAiContextTokenDistribution, resolveAiContextUsage } from "/ai-context-meter.js?v=20261017-context-model-id-v2";
 import { isPhoneClient } from "/phone-client.js?v=20260819-phone-client-v1";
 import { formatAiToolCallResult } from "/ai-tool-call.js?v=20260801-ai-tool-result-chars-v1";
 import {
@@ -16017,7 +16017,15 @@ function renderAiContextDistribution(usage) {
   const popover = $("#ai-context-popover");
   const host = $("#ai-context-distribution");
   const distribution = normalizeAiContextTokenDistribution(usage);
-  $("#ai-context-popover-description").textContent = formatAiContextPopoverDescription(usage);
+  const description = $("#ai-context-popover-description");
+  description.replaceChildren(document.createTextNode(formatAiContextPopoverDescription(usage)));
+  const modelLine = formatAiContextModelIdLine(usage);
+  if (modelLine) {
+    const line = document.createElement("span");
+    line.className = "ai-context-model-id";
+    line.textContent = modelLine;
+    description.append(line);
+  }
   host.replaceChildren(...distribution.items.map((item) => {
     const row = document.createElement("div");
     row.className = "ai-context-distribution-row";

@@ -369,6 +369,7 @@ describe("AI 对话上下文压缩", () => {
     });
 
     expect(usage).toMatchObject({ conversationTokens: expect.any(Number), compactedMessageCount: 0 });
+    expect(usage).not.toHaveProperty("providerModelId");
     expect(Number(usage.conversationTokens)).toBeGreaterThan(0);
     expect(contextSpy).toHaveBeenCalledTimes(1);
 

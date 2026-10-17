@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error 浏览器端模块没有单独的类型声明，测试仅调用纯函数导出。
-import { attachAiContextCacheHitPercent, formatAiContextCacheHitPercent, formatAiContextPopoverDescription, formatAiContextUsagePercent, formatAiContextUsageTooltip, mergeAiContextUsage, normalizeAiContextTokenDistribution, resolveAiContextUsage } from "../../src/public/ai-context-meter.js";
+import { attachAiContextCacheHitPercent, formatAiContextCacheHitPercent, formatAiContextModelIdLine, formatAiContextPopoverDescription, formatAiContextUsagePercent, formatAiContextUsageTooltip, mergeAiContextUsage, normalizeAiContextTokenDistribution, resolveAiContextUsage } from "../../src/public/ai-context-meter.js";
 
 describe("AI 上下文用量提示", () => {
   it("低于 10% 时保留一位小数，其余显示整数", () => {
@@ -40,6 +40,15 @@ describe("AI 上下文用量提示", () => {
         outputTokens: 200
       }
     })).toBe("已占用 700 / 1,000 tok · context 70% · cache hit 46.7%");
+    expect(formatAiContextModelIdLine(null)).toBe("");
+    expect(formatAiContextModelIdLine({ providerModelId: "  " })).toBe("");
+    expect(formatAiContextModelIdLine({
+      contextWindow: 1_000,
+      inputTokens: 700,
+      maxOutputTokens: 500,
+      outputTokens: 200
+    })).toBe("");
+    expect(formatAiContextModelIdLine({ providerModelId: " claude-sonnet-4-6 " })).toBe("模型：claude-sonnet-4-6");
     expect(formatAiContextUsageTooltip({
       inputTokens: 700,
       contextWindow: 1_000,

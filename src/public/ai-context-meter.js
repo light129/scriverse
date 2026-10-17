@@ -20,6 +20,11 @@ export function formatAiContextPopoverDescription(usage) {
   return `已占用 ${occupied} / ${contextWindow} tok · ${formatAiContextPercentSummary(usage)}`;
 }
 
+export function formatAiContextModelIdLine(usage) {
+  const modelId = typeof usage?.providerModelId === "string" ? usage.providerModelId.trim() : "";
+  return modelId ? `模型：${modelId}` : "";
+}
+
 export function formatAiContextUsageTooltip(usage) {
   if (!usage) return "选择可用模型后显示当前上下文用量";
   const inputTokens = Math.max(0, Math.round(Number(usage.inputTokens) || 0)).toLocaleString("zh-CN");

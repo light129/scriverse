@@ -1502,6 +1502,7 @@ describe("AI 供应商、模型与建议 API", () => {
       modelId
     }).expect(201);
     expect(measured.body.data.contextUsage).toMatchObject({ modelId, contextWindow: 32_768 });
+    expect(measured.body.data.contextUsage.providerModelId).toBe("mock-novel-model");
     expect(measured.body.data.contextUsage.inputTokens).toBeGreaterThan(0);
     await request(runtime.app).put(`/api/works/${secondWork.body.data.id}/task-defaults/chat`).send({ modelId }).expect(200);
     expect(secondChapter.body.data.title).toBe("第二章");
