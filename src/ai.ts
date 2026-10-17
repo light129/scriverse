@@ -7490,6 +7490,8 @@ export class AiManager {
     const outputTokens = Math.max(0, Math.round(Number(generatedOutputTokens) || 0));
     const estimatedUsage = {
       ...baseUsage,
+      // 模型 id 只跟随实际调用用量返回；调用前的上下文估算不包含该字段。
+      providerModelId: stringValue(model, "model_id"),
       contextWindow,
       inputTokens,
       outputTokens,
